@@ -40,7 +40,7 @@ from kalshi_client import (
     place_buy_order,
     place_sell_order,
 )
-from noaa_scanner import get_all_forecasts
+from noaa_scanner import fetch_all_forecasts
 from risk_manager import RiskLimitExceeded, risk_manager
 
 # ---------------------------------------------------------------------------
@@ -104,7 +104,7 @@ def run_scan_cycle(cycle_number: int) -> dict:
 
     # ---- 1. Fetch NOAA forecasts -------------------------------------------
     logger.info("=== Cycle %d: Fetching NOAA forecasts ===", cycle_number)
-    forecasts = get_all_forecasts()
+    forecasts = fetch_all_forecasts()
     successful_forecasts = {k: v for k, v in forecasts.items() if v is not None}
     stats["cities_scanned"] = len(successful_forecasts)
     logger.info(
