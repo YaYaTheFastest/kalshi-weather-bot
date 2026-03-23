@@ -72,7 +72,7 @@ SELL_MIN_PRICE: float = float(
 MAX_POSITION_USD: float = float(
     os.getenv("MAX_POSITION_USD", "2.00")
 )  # Max spend per position
-MAX_OPEN_POSITIONS: int = int(os.getenv("MAX_OPEN_POSITIONS", "5"))
+MAX_OPEN_POSITIONS: int = int(os.getenv("MAX_OPEN_POSITIONS", "10"))
 MAX_DAILY_LOSS_USD: float = float(
     os.getenv("MAX_DAILY_LOSS_USD", "50.00")
 )  # Kill switch
@@ -107,6 +107,19 @@ CITIES: dict = {
     "SFO": {"name": "San Francisco", "lat": 37.7749, "lon": -122.4194, "kalshi_suffix": "SF"},
     "OKC": {"name": "Oklahoma City", "lat": 35.4676, "lon": -97.5164, "kalshi_suffix": "OKC"},
 }
+
+# ---------------------------------------------------------------------------
+# Gas-specific trading parameters
+# ---------------------------------------------------------------------------
+GAS_BUY_CONFIDENCE_THRESHOLD: float = float(
+    os.getenv("GAS_BUY_CONFIDENCE_THRESHOLD", "0.80")
+)  # Model confidence > 80%
+GAS_BUY_MAX_PRICE: float = float(
+    os.getenv("GAS_BUY_MAX_PRICE", "0.20")
+)  # Only buy if market ask < $0.20
+GAS_SELL_MIN_PRICE: float = float(
+    os.getenv("GAS_SELL_MIN_PRICE", "0.45")
+)  # Exit if market bid > $0.45
 
 # ---------------------------------------------------------------------------
 # Logging

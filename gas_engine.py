@@ -28,22 +28,8 @@ from kalshi_client import KalshiPosition
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Gas-specific trading parameters (can be overridden via env vars)
-# ---------------------------------------------------------------------------
-import os
-
-GAS_BUY_CONFIDENCE_THRESHOLD: float = float(
-    os.getenv("GAS_BUY_CONFIDENCE_THRESHOLD", "0.85")
-)  # Our model confidence > 85%
-
-GAS_BUY_MAX_PRICE: float = float(
-    os.getenv("GAS_BUY_MAX_PRICE", "0.15")
-)  # Only buy if market ask < $0.15
-
-GAS_SELL_MIN_PRICE: float = float(
-    os.getenv("GAS_SELL_MIN_PRICE", "0.45")
-)  # Exit if market bid > $0.45
+# Gas-specific thresholds are defined in config.py and can be
+# overridden via environment variables in .env.
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +101,7 @@ def generate_gas_buy_signals(
             continue
 
         # Skip if too expensive
-        if market.yes_ask >= GAS_BUY_MAX_PRICE:
+        if market.yes_ask >= config.GAS_BUY_MAX_PRICE:
             continue
 
         # Update forecast with this market's settlement horizon
@@ -141,7 +127,7 @@ def generate_gas_buy_signals(
 
         # YES side: our model says high probability above strike,
         # but market is pricing it low (cheap YES contract)
-        if prob_above > GAS_BUY_CONFIDENCE_THRESHOLD and market.yes_ask < GAS_BUY_MAX_PRICE:
+        if prob_above > config.GAS_BUY_CONFIDENCE_THRESHOLD and market.yes_ask < config.GAS_BUY_MAX_PRICE:
             edge = prob_above - market.yes_ask
             signal = GasBuySignal(
                 market=market,
@@ -161,8 +147,8 @@ def generate_gas_buy_signals(
         no_price = 1.0 - market.yes_bid if market.yes_bid > 0 else 1.0 - market.yes_ask
         prob_below = 1.0 - prob_above
         if (
-            prob_below > GAS_BUY_CONFIDENCE_THRESHOLD
-            and no_price < GAS_BUY_MAX_PRICE
+            prob_below > config.GAS_BUY_CONFIDENCE_THRESHOLD
+            and no_price < config.GAS_BUY_MAX_PRICE
             and no_price > 0
         ):
             edge = prob_below - no_price
@@ -206,7 +192,7 @@ def generate_gas_sell_signals(
         market = market_by_ticker.get(position.ticker)
         bid = market.yes_bid if market else 0.0
 
-        if bid > GAS_SELL_MIN_PRICE:
+        if bid > config.GAS_SELL_MIN_PRICE:
             signal = GasSellSignal(
                 position=position,
                 market=market,
