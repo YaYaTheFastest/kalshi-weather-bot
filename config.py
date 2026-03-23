@@ -22,11 +22,19 @@ DRY_RUN: bool = os.getenv("DRY_RUN", "true").lower() in ("true", "1", "yes")
 KALSHI_BASE_URL: str = os.getenv(
     "KALSHI_BASE_URL", "https://api.elections.kalshi.com/trade-api/v2"
 )
-KALSHI_ACCESS_KEY: str = os.getenv("KALSHI_ACCESS_KEY", "")
-# PEM-encoded RSA private key (newlines as \n in the env file)
-KALSHI_PRIVATE_KEY_PEM: str = os.getenv("KALSHI_PRIVATE_KEY_PEM", "").replace(
-    "\\n", "\n"
-)
+KALSHI_ACCESS_KEY: str = os.getenv("KALSHI_ACCESS_KEY", "") or os.getenv("KALSHI_API_KEY_ID", "")
+
+# PEM-encoded RSA private key — either inline or read from a file path
+_pem_inline: str = os.getenv("KALSHI_PRIVATE_KEY_PEM", "").replace("\\n", "\n")
+_pem_path: str = os.getenv("KALSHI_PRIVATE_KEY_PATH", "")
+
+if _pem_inline:
+    KALSHI_PRIVATE_KEY_PEM: str = _pem_inline
+elif _pem_path and os.path.isfile(_pem_path):
+    with open(_pem_path, "r") as _f:
+        KALSHI_PRIVATE_KEY_PEM: str = _f.read().strip()
+else:
+    KALSHI_PRIVATE_KEY_PEM: str = ""
 
 # ---------------------------------------------------------------------------
 # NOAA API
