@@ -89,9 +89,19 @@ def _create_signature(timestamp_ms: int, method: str, path: str) -> str:
             "Provide your RSA private key in the .env file."
         )
     private_key = serialization.load_pem_private_key(pem.encode(), password=None)
-    message = f"{timestamp_ms}{method}{path}".encode()
-    signature = private_key.sign(message, padding.PKCS1v15(), hashes.SHA256())
-    return base64.b64encode(signature).decode()
+    # Strip query parameters before signing
+    path_without_query = path.split('?')[0]
+    message = f"{timestamp_ms}{method}{path_without_query}".encode('utf-8')
+    # Kalshi requires RSA-PSS (not PKCS1v15)
+    signature = private_key.sign(
+        message,
+        padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.DIGEST_LENGTH
+        ),
+        hashes.SHA256()
+    )
+    return base64.b64encode(signature).decode('utf-8')
 
 
 def _auth_headers(method: str, path: str) -> dict:
