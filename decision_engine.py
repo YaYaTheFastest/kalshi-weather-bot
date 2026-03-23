@@ -22,7 +22,7 @@ from typing import Optional
 
 import config
 from kalshi_client import KalshiMarket, KalshiPosition
-from noaa_scanner import NOAAForecast
+from noaa_scanner import CityForecast
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ class SellSignal:
 # ---------------------------------------------------------------------------
 
 def generate_buy_signals(
-    forecasts: dict[str, Optional[NOAAForecast]],
+    forecasts: dict[str, Optional[CityForecast]],
     open_markets: list[KalshiMarket],
     held_tickers: set[str],
 ) -> list[BuySignal]:
@@ -84,7 +84,7 @@ def generate_buy_signals(
     Returns a ranked list of buy signals (highest edge first).
 
     Args:
-        forecasts:      Dict of city_key -> NOAAForecast (or None on failure)
+        forecasts:      Dict of city_key -> CityForecast (or None on failure)
         open_markets:   All open KXHIGH markets from Kalshi
         held_tickers:   Set of tickers we already hold (skip these)
     """
