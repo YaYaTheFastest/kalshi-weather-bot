@@ -41,9 +41,8 @@ else:
 # ---------------------------------------------------------------------------
 NOAA_BASE_URL: str = "https://api.weather.gov"
 # NWS requires a descriptive User-Agent
-NOAA_USER_AGENT: str = os.getenv(
-    "NOAA_USER_AGENT", "KalshiWeatherBot/1.0 (contact@example.com)"
-)
+_noaa_contact = os.getenv("NOAA_USER_AGENT", "contact@example.com")
+NOAA_USER_AGENT: str = f"(KalshiWeatherBot, {_noaa_contact})"
 
 # ---------------------------------------------------------------------------
 # Telegram
