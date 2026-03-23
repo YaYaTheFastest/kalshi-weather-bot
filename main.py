@@ -81,6 +81,11 @@ def _handle_signal(signum, frame):
 
 signal.signal(signal.SIGINT, _handle_signal)
 signal.signal(signal.SIGTERM, _handle_signal)
+# Ignore SIGHUP so nohup works reliably
+try:
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+except (AttributeError, OSError):
+    pass  # SIGHUP not available on all platforms
 
 
 # ---------------------------------------------------------------------------
