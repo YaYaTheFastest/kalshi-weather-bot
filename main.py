@@ -34,9 +34,13 @@ import time
 from datetime import datetime, timezone
 
 # ---------------------------------------------------------------------------
-# Clear bytecode cache before importing local modules to prevent stale .pyc
+# Ensure local modules are imported from this directory, not stale copies
 # ---------------------------------------------------------------------------
 _project_dir = os.path.dirname(os.path.abspath(__file__))
+# Force this directory to be first on sys.path
+if _project_dir not in sys.path or sys.path[0] != _project_dir:
+    sys.path.insert(0, _project_dir)
+# Clear bytecode cache
 for _root, _dirs, _files in os.walk(_project_dir):
     if "__pycache__" in _dirs:
         shutil.rmtree(os.path.join(_root, "__pycache__"), ignore_errors=True)
@@ -344,6 +348,10 @@ def main() -> None:
     logger.info("Mode: %s", "DRY RUN" if config.DRY_RUN else "LIVE TRADING")
     logger.info("Markets: Weather=%s | Gas=%s", ENABLE_WEATHER, ENABLE_GAS)
     logger.info("Scan interval: %ds", config.SCAN_INTERVAL_SECONDS)
+    # Diagnostic: log which files are actually loaded
+    import decision_engine as _de
+    logger.info("main.py loaded from: %s", os.path.abspath(__file__))
+    logger.info("decision_engine loaded from: %s", os.path.abspath(_de.__file__))
     logger.info("=" * 60)
 
     telegram_alerts.alert_bot_started()
