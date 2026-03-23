@@ -86,54 +86,26 @@ SCAN_INTERVAL_SECONDS: int = int(os.getenv("SCAN_INTERVAL_SECONDS", "120"))  # 2
 # Each entry: city_key -> (display_name, lat, lon, kalshi_ticker_suffix)
 # Kalshi temperature market tickers follow pattern KXHIGH<SUFFIX>-<DATE>-<BUCKET>
 CITIES: dict = {
-    "NYC": {
-        "name": "New York City",
-        "lat": 40.7128,
-        "lon": -74.0060,
-        "kalshi_suffix": "NYC",   # used to filter KXHIGHNYC markets
-    },
-    "CHI": {
-        "name": "Chicago",
-        "lat": 41.8781,
-        "lon": -87.6298,
-        "kalshi_suffix": "CHI",
-    },
-    "LA": {
-        "name": "Los Angeles",
-        "lat": 34.0522,
-        "lon": -118.2437,
-        "kalshi_suffix": "LA",
-    },
-    "MIA": {
-        "name": "Miami",
-        "lat": 25.7617,
-        "lon": -80.1918,
-        "kalshi_suffix": "MIA",
-    },
-    "AUS": {
-        "name": "Austin",
-        "lat": 30.2672,
-        "lon": -97.7431,
-        "kalshi_suffix": "AUS",
-    },
-    "BOS": {
-        "name": "Boston",
-        "lat": 42.3601,
-        "lon": -71.0589,
-        "kalshi_suffix": "BOS",
-    },
-    "HOU": {
-        "name": "Houston",
-        "lat": 29.7604,
-        "lon": -95.3698,
-        "kalshi_suffix": "HOU",
-    },
-    "DEN": {
-        "name": "Denver",
-        "lat": 39.7392,
-        "lon": -104.9903,
-        "kalshi_suffix": "DEN",
-    },
+    # --- Original 8 ---
+    "NYC": {"name": "New York City", "lat": 40.7128, "lon": -74.0060, "kalshi_suffix": "NYC"},
+    "CHI": {"name": "Chicago", "lat": 41.8781, "lon": -87.6298, "kalshi_suffix": "CHI"},
+    "LA":  {"name": "Los Angeles", "lat": 34.0522, "lon": -118.2437, "kalshi_suffix": "LA"},
+    "MIA": {"name": "Miami", "lat": 25.7617, "lon": -80.1918, "kalshi_suffix": "MIA"},
+    "AUS": {"name": "Austin", "lat": 30.2672, "lon": -97.7431, "kalshi_suffix": "AUS"},
+    "BOS": {"name": "Boston", "lat": 42.3601, "lon": -71.0589, "kalshi_suffix": "BOS"},
+    "HOU": {"name": "Houston", "lat": 29.7604, "lon": -95.3698, "kalshi_suffix": "HOU"},
+    "DEN": {"name": "Denver", "lat": 39.7392, "lon": -104.9903, "kalshi_suffix": "DEN"},
+    # --- Expanded 12 (all Kalshi temperature cities) ---
+    "ATL": {"name": "Atlanta", "lat": 33.7490, "lon": -84.3880, "kalshi_suffix": "ATL"},
+    "PHL": {"name": "Philadelphia", "lat": 39.9526, "lon": -75.1652, "kalshi_suffix": "PHL"},
+    "PHX": {"name": "Phoenix", "lat": 33.4484, "lon": -112.0740, "kalshi_suffix": "PHX"},
+    "DCA": {"name": "Washington DC", "lat": 38.9072, "lon": -77.0369, "kalshi_suffix": "DC"},
+    "LAS": {"name": "Las Vegas", "lat": 36.1699, "lon": -115.1398, "kalshi_suffix": "LV"},
+    "SAT": {"name": "San Antonio", "lat": 29.4241, "lon": -98.4936, "kalshi_suffix": "SA"},
+    "MSP": {"name": "Minneapolis", "lat": 44.9778, "lon": -93.2650, "kalshi_suffix": "MIN"},
+    "DAL": {"name": "Dallas", "lat": 32.7767, "lon": -96.7970, "kalshi_suffix": "DAL"},
+    "SFO": {"name": "San Francisco", "lat": 37.7749, "lon": -122.4194, "kalshi_suffix": "SF"},
+    "OKC": {"name": "Oklahoma City", "lat": 35.4676, "lon": -97.5164, "kalshi_suffix": "OKC"},
 }
 
 # ---------------------------------------------------------------------------

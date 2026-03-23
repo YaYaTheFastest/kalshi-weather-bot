@@ -83,6 +83,16 @@ CITY_TIMEZONES = {
     "BOS": "America/New_York",
     "HOU": "America/Chicago",
     "DEN": "America/Denver",
+    "ATL": "America/New_York",
+    "PHL": "America/New_York",
+    "PHX": "America/Phoenix",
+    "DCA": "America/New_York",
+    "LAS": "America/Los_Angeles",
+    "SAT": "America/Chicago",
+    "MSP": "America/Chicago",
+    "DAL": "America/Chicago",
+    "SFO": "America/Los_Angeles",
+    "OKC": "America/Chicago",
 }
 
 
