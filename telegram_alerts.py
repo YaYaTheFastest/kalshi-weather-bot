@@ -24,6 +24,11 @@ import config
 from decision_engine import BuySignal, SellSignal
 from kalshi_client import OrderResult
 
+# Lazy imports to avoid circular dependency
+def _get_gas_signal_classes():
+    from gas_engine import GasBuySignal, GasSellSignal
+    return GasBuySignal, GasSellSignal
+
 logger = logging.getLogger(__name__)
 
 TELEGRAM_API_BASE = "https://api.telegram.org"
@@ -70,14 +75,22 @@ def _dry_tag() -> str:
 # ---------------------------------------------------------------------------
 
 def alert_bot_started() -> None:
+    import os
     mode = "DRY RUN (simulation only)" if config.DRY_RUN else "LIVE TRADING"
+    weather_on = os.getenv("ENABLE_WEATHER", "true").lower() in ("true", "1", "yes")
+    gas_on = os.getenv("ENABLE_GAS", "true").lower() in ("true", "1", "yes")
+    markets_str = []
+    if weather_on:
+        markets_str.append(f"Weather ({len(config.CITIES)} cities)")
+    if gas_on:
+        markets_str.append("Gas Prices (weekly + monthly)")
     text = (
-        f"🤖 <b>Kalshi Weather Bot Started</b>\n"
+        f"🤖 <b>Kalshi Trading Bot Started</b>\n"
         f"Mode: <b>{mode}</b>\n"
+        f"Markets: {', '.join(markets_str)}\n"
         f"Time: {_now_str()}\n\n"
-        f"Cities: {', '.join(config.CITIES.keys())}\n"
         f"Scan interval: {config.SCAN_INTERVAL_SECONDS}s\n"
-        f"Buy threshold: {config.BUY_CONFIDENCE_THRESHOLD:.0%} NOAA conf @ &lt;${config.BUY_MAX_PRICE:.2f}\n"
+        f"Buy threshold: conf &gt;{config.BUY_CONFIDENCE_THRESHOLD:.0%} @ &lt;${config.BUY_MAX_PRICE:.2f}\n"
         f"Sell threshold: bid &gt;${config.SELL_MIN_PRICE:.2f}\n"
         f"Max position: ${config.MAX_POSITION_USD:.2f} | "
         f"Max positions: {config.MAX_OPEN_POSITIONS} | "
@@ -180,6 +193,49 @@ def alert_error(context: str, exc: Exception) -> None:
         f"Error: {type(exc).__name__}: {str(exc)[:300]}\n"
         f"Time: {_now_str()}"
     )
+    _send(text)
+
+
+# ---------------------------------------------------------------------------
+# Gas price alerts
+# ---------------------------------------------------------------------------
+
+def alert_gas_buy_executed(signal, result: OrderResult, num_contracts: int, cost_usd: float) -> None:
+    status = "✅ Filled" if result.success else "❌ Failed"
+    text = (
+        f"{_dry_tag()}⛽📈 <b>GAS BUY ORDER {status}</b>\n"
+        f"Ticker: <code>{signal.market.ticker}</code>\n"
+        f"Strike: ${signal.market.strike_price:.3f}\n"
+        f"Direction: {signal.direction.upper()}\n"
+        f"Type: {signal.market.market_type}\n"
+        f"Contracts: {num_contracts}\n"
+        f"Price: ${signal.market_price:.2f} | Cost: ${cost_usd:.2f}\n"
+        f"Model confidence: {signal.model_confidence:.1%}\n"
+        f"Current AAA: ${signal.current_gas_price:.3f}\n"
+        f"Projected: ${signal.projected_price:.3f}\n"
+        f"Edge: {signal.edge:.1%}\n"
+        f"Settles in: {signal.market.days_to_settlement}d\n"
+        f"Order ID: {result.order_id or 'n/a'}\n"
+        f"Time: {_now_str()}"
+    )
+    if not result.success:
+        text += f"\nError: {result.error}"
+    _send(text)
+
+
+def alert_gas_sell_executed(signal, result: OrderResult, proceeds_usd: float) -> None:
+    status = "✅ Filled" if result.success else "❌ Failed"
+    text = (
+        f"{_dry_tag()}⛽📉 <b>GAS SELL ORDER {status}</b>\n"
+        f"Ticker: <code>{signal.position.ticker}</code>\n"
+        f"Reason: {signal.reason}\n"
+        f"Bid price: ${signal.bid_price:.2f}\n"
+        f"Proceeds: ${proceeds_usd:.2f}\n"
+        f"Order ID: {result.order_id or 'n/a'}\n"
+        f"Time: {_now_str()}"
+    )
+    if not result.success:
+        text += f"\nError: {result.error}"
     _send(text)
 
 
