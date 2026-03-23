@@ -172,7 +172,7 @@ def run_scan_cycle(cycle_number: int) -> dict:
             stats["errors"] += 1
 
     # ---- 5. Buy signals ----------------------------------------------------
-    buy_signals = generate_buy_signals(forecasts, open_markets, held_tickers)
+    buy_signals = generate_buy_signals(all_forecasts, open_markets, held_tickers)
     stats["buy_signals"] = len(buy_signals)
 
     # Check kill switch before processing any buys
