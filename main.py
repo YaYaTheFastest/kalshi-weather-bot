@@ -115,6 +115,53 @@ except (AttributeError, OSError):
 
 
 # ---------------------------------------------------------------------------
+# Weather scan (extracted to its own function to isolate variable scope)
+# ---------------------------------------------------------------------------
+
+def _run_weather_scan(
+    cycle_number: int,
+    live_positions: list,
+    held_tickers: set,
+    stats: dict,
+) -> list:
+    """
+    Fetch weather forecasts and generate buy/sell signals.
+    Returns list of (signal, 'buy'|'sell') tuples.
+    """
+    result_signals = []
+
+    # Fetch tomorrow's and today's forecasts
+    tmrw = fetch_all_forecasts()
+    tday = fetch_today_forecasts()
+
+    # Merge into a single dict
+    merged = {}
+    merged.update(tmrw)
+    for city_key, city_forecast in tday.items():
+        merged[f"{city_key}_today"] = city_forecast
+
+    stats["cities_scanned"] = len(tmrw) + len(tday)
+    logger.info(
+        "Weather forecasts: %d tomorrow + %d today",
+        len(tmrw), len(tday),
+    )
+
+    # Fetch temperature markets
+    open_temp_markets = get_temperature_markets()
+    stats["weather_markets"] = len(open_temp_markets)
+
+    # Sell signals
+    for sig in generate_sell_signals(live_positions, open_temp_markets):
+        result_signals.append((sig, "sell"))
+
+    # Buy signals
+    for sig in generate_buy_signals(merged, open_temp_markets, held_tickers):
+        result_signals.append((sig, "buy"))
+
+    return result_signals
+
+
+# ---------------------------------------------------------------------------
 # Single scan cycle
 # ---------------------------------------------------------------------------
 
@@ -161,33 +208,12 @@ def run_scan_cycle(cycle_number: int) -> dict:
     # ====================================================================
     if ENABLE_WEATHER:
         logger.info("=== Cycle %d: Weather scan ===", cycle_number)
-
-        # Fetch forecasts
-        forecasts_tomorrow = fetch_all_forecasts()
-        forecasts_today = fetch_today_forecasts()
-        all_forecasts = {}
-        all_forecasts.update(forecasts_tomorrow)
-        for k, v in forecasts_today.items():
-            all_forecasts[f"{k}_today"] = v
-        stats["cities_scanned"] = len(forecasts_tomorrow) + len(forecasts_today)
-        logger.info(
-            "Weather forecasts: %d tomorrow + %d today",
-            len(forecasts_tomorrow), len(forecasts_today),
-        )
-
-        # Fetch temperature markets
-        open_temp_markets = get_temperature_markets()
-        stats["weather_markets"] = len(open_temp_markets)
-
-        # Weather sell signals
-        weather_sells = generate_sell_signals(live_positions, open_temp_markets)
-        for sig in weather_sells:
-            all_sell_signals.append((sig, "weather"))
-
-        # Weather buy signals
-        weather_buys = generate_buy_signals(all_forecasts, open_temp_markets, held_tickers)
-        for sig in weather_buys:
-            all_buy_signals.append((sig, "weather"))
+        weather_signals = _run_weather_scan(cycle_number, live_positions, held_tickers, stats)
+        for sig, sig_type in weather_signals:
+            if sig_type == "buy":
+                all_buy_signals.append((sig, "weather"))
+            else:
+                all_sell_signals.append((sig, "weather"))
 
     # ====================================================================
     # GAS PRICE MARKETS
@@ -348,18 +374,7 @@ def main() -> None:
     logger.info("Mode: %s", "DRY RUN" if config.DRY_RUN else "LIVE TRADING")
     logger.info("Markets: Weather=%s | Gas=%s", ENABLE_WEATHER, ENABLE_GAS)
     logger.info("Scan interval: %ds", config.SCAN_INTERVAL_SECONDS)
-    # Diagnostic: log which files are actually loaded and verify code integrity
-    import decision_engine as _de
-    logger.info("main.py loaded from: %s", os.path.abspath(__file__))
-    logger.info("decision_engine loaded from: %s", os.path.abspath(_de.__file__))
-    # Verify critical line content at startup
-    import inspect
-    _src = inspect.getsource(run_scan_cycle)
-    _src_lines = _src.split('\n')
-    for _i, _line in enumerate(_src_lines):
-        if 'forecasts' in _line and 'forecasts_' not in _line and 'all_forecasts' not in _line and 'fetch' not in _line and '#' not in _line and '"' not in _line and 'Weather' not in _line:
-            logger.error("!!! STALE CODE DETECTED in run_scan_cycle line %d: %s", _i, _line.strip())
-    logger.info("PID: %d | Python: %s", os.getpid(), sys.executable)
+    logger.info("PID: %d", os.getpid())
     logger.info("=" * 60)
 
     telegram_alerts.alert_bot_started()
