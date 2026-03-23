@@ -348,10 +348,18 @@ def main() -> None:
     logger.info("Mode: %s", "DRY RUN" if config.DRY_RUN else "LIVE TRADING")
     logger.info("Markets: Weather=%s | Gas=%s", ENABLE_WEATHER, ENABLE_GAS)
     logger.info("Scan interval: %ds", config.SCAN_INTERVAL_SECONDS)
-    # Diagnostic: log which files are actually loaded
+    # Diagnostic: log which files are actually loaded and verify code integrity
     import decision_engine as _de
     logger.info("main.py loaded from: %s", os.path.abspath(__file__))
     logger.info("decision_engine loaded from: %s", os.path.abspath(_de.__file__))
+    # Verify critical line content at startup
+    import inspect
+    _src = inspect.getsource(run_scan_cycle)
+    _src_lines = _src.split('\n')
+    for _i, _line in enumerate(_src_lines):
+        if 'forecasts' in _line and 'forecasts_' not in _line and 'all_forecasts' not in _line and 'fetch' not in _line and '#' not in _line and '"' not in _line and 'Weather' not in _line:
+            logger.error("!!! STALE CODE DETECTED in run_scan_cycle line %d: %s", _i, _line.strip())
+    logger.info("PID: %d | Python: %s", os.getpid(), sys.executable)
     logger.info("=" * 60)
 
     telegram_alerts.alert_bot_started()
