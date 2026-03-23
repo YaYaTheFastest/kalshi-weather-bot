@@ -99,8 +99,18 @@ def generate_buy_signals(
         if not market.city_key:
             continue
 
-        # Skip if no forecast for this city
-        forecast = forecasts.get(market.city_key)
+        # Try to match forecast by city — check both tomorrow and today
+        forecast = forecasts.get(market.city_key)  # tomorrow's forecast
+        forecast_today = forecasts.get(f"{market.city_key}_today")  # today's forecast
+
+        # Use today's forecast for today's markets, tomorrow's for tomorrow's
+        from datetime import date as _date
+        today = _date.today()
+        if market.market_date and market.market_date == today and forecast_today:
+            forecast = forecast_today
+        elif forecast is None and forecast_today:
+            forecast = forecast_today  # fallback to today if no tomorrow
+
         if forecast is None:
             continue
 

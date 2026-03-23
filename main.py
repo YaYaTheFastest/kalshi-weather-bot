@@ -40,7 +40,7 @@ from kalshi_client import (
     place_buy_order,
     place_sell_order,
 )
-from noaa_scanner import fetch_all_forecasts
+from noaa_scanner import fetch_all_forecasts, fetch_today_forecasts
 from risk_manager import RiskLimitExceeded, risk_manager
 
 # ---------------------------------------------------------------------------
@@ -102,14 +102,22 @@ def run_scan_cycle(cycle_number: int) -> dict:
         "errors": 0,
     }
 
-    # ---- 1. Fetch NOAA forecasts -------------------------------------------
-    logger.info("=== Cycle %d: Fetching NOAA forecasts ===", cycle_number)
-    forecasts = fetch_all_forecasts()
-    successful_forecasts = {k: v for k, v in forecasts.items() if v is not None}
-    stats["cities_scanned"] = len(successful_forecasts)
+    # ---- 1. Fetch forecasts (tomorrow + today) ----------------------------
+    logger.info("=== Cycle %d: Fetching forecasts ===", cycle_number)
+    forecasts_tomorrow = fetch_all_forecasts()
+    forecasts_today = fetch_today_forecasts()
+    # Merge: today's forecasts supplement tomorrow's for same-day trading
+    all_forecasts = {}
+    all_forecasts.update(forecasts_tomorrow)
+    # Also keep today's forecasts available — they'll match today's markets
+    for k, v in forecasts_today.items():
+        # Use key like "NYC_today" so both days can coexist
+        all_forecasts[f"{k}_today"] = v
+    successful_forecasts = {k: v for k, v in all_forecasts.items() if v is not None}
+    stats["cities_scanned"] = len(forecasts_tomorrow) + len(forecasts_today)
     logger.info(
-        "NOAA forecasts retrieved: %d/%d cities",
-        len(successful_forecasts), len(config.CITIES),
+        "Forecasts retrieved: %d tomorrow + %d today",
+        len(forecasts_tomorrow), len(forecasts_today),
     )
 
     # ---- 2. Fetch Kalshi markets -------------------------------------------

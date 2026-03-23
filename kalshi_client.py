@@ -51,6 +51,7 @@ class KalshiMarket:
     bucket_low: Optional[float] = None
     bucket_high: Optional[float] = None
     city_key: Optional[str] = None
+    market_date: Optional[date] = None  # parsed from ticker
 
 
 @dataclass
@@ -274,6 +275,16 @@ def get_temperature_markets(target_date: Optional[date] = None) -> list[KalshiMa
             city_key = _identify_city_from_ticker(ticker)
             bucket_low, bucket_high = _parse_bucket_from_ticker(ticker, "")
 
+            # Parse market date from ticker (e.g. KXHIGHNYC-26MAR23-T72 -> 2026-03-23)
+            market_date = None
+            try:
+                parts = ticker.split("-")
+                if len(parts) >= 2:
+                    date_str = parts[1]  # e.g. "26MAR23"
+                    market_date = datetime.strptime(date_str, "%y%b%d").date()
+            except (ValueError, IndexError):
+                pass
+
             market = KalshiMarket(
                 ticker=ticker,
                 event_ticker=event_ticker,
@@ -284,6 +295,7 @@ def get_temperature_markets(target_date: Optional[date] = None) -> list[KalshiMa
                 bucket_low=bucket_low,
                 bucket_high=bucket_high,
                 city_key=city_key,
+                market_date=market_date,
             )
             all_markets.append(market)
 

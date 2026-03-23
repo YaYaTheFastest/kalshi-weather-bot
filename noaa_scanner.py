@@ -46,6 +46,12 @@ class CityForecast:
         self.temp_std = statistics.stdev(hourly_temps) if len(hourly_temps) > 1 else 3.0
 
     def confidence_for_range(self, low: float, high: float) -> float:
+        return self._gaussian_confidence(low, high)
+
+    # Alias for compatibility
+    confidence_in_range = confidence_for_range
+
+    def _gaussian_confidence(self, low: float, high: float) -> float:
         """
         Estimate P(daily_high in [low, high]) using a Gaussian centered on
         the forecasted high with sigma = max(temp_std, 2.0).
@@ -219,10 +225,62 @@ def _fetch_noaa(city_key: str, lat: float, lon: float) -> Optional[CityForecast]
 # Public API — tries Open-Meteo first, falls back to NOAA
 # ---------------------------------------------------------------------------
 
+def _fetch_open_meteo_day(city_key: str, lat: float, lon: float, target_date: str) -> Optional[CityForecast]:
+    """Fetch forecast for a specific date (today or tomorrow)."""
+    tz = CITY_TIMEZONES.get(city_key, "America/New_York")
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "hourly": "temperature_2m",
+        "temperature_unit": "fahrenheit",
+        "forecast_days": 2,
+        "timezone": tz,
+    }
+
+    try:
+        resp = requests.get(OPEN_METEO_BASE, params=params, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as exc:
+        logger.error("Open-Meteo error for %s: %s", city_key, exc)
+        return None
+
+    hourly = data.get("hourly", {})
+    times = hourly.get("time", [])
+    temps = hourly.get("temperature_2m", [])
+
+    if not times or not temps:
+        return None
+
+    day_temps = []
+    for t_str, temp in zip(times, temps):
+        if temp is not None and t_str.startswith(target_date):
+            day_temps.append(temp)
+
+    if not day_temps:
+        return None
+
+    forecasted_high = max(day_temps)
+    forecast_dt = datetime.strptime(target_date, "%Y-%m-%d").date()
+
+    logger.info(
+        "Open-Meteo %s [%s]: forecasted high %.1f°F (%d hourly points)",
+        city_key, target_date, forecasted_high, len(day_temps),
+    )
+
+    return CityForecast(
+        city_key=city_key,
+        forecast_date=forecast_dt,
+        hourly_temps=day_temps,
+        forecasted_high=forecasted_high,
+    )
+
+
 def fetch_all_forecasts() -> dict[str, CityForecast]:
     """
-    Fetch forecasts for all configured cities.
-    Returns {city_key: CityForecast} for successful fetches.
+    Fetch forecasts for all configured cities — BOTH today AND tomorrow.
+    Returns {city_key: CityForecast} for tomorrow's forecast.
+    Also returns today's forecasts in a second dict.
     """
     results: dict[str, CityForecast] = {}
 
@@ -242,5 +300,21 @@ def fetch_all_forecasts() -> dict[str, CityForecast]:
             results[city_key] = forecast
         else:
             logger.warning("No forecast available for %s from any source", city_key)
+
+    return results
+
+
+def fetch_today_forecasts() -> dict[str, CityForecast]:
+    """
+    Fetch TODAY's forecasts for all configured cities.
+    Same-day trading: compare forecast against today's Kalshi markets.
+    """
+    results: dict[str, CityForecast] = {}
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    for city_key, city_info in config.CITIES.items():
+        forecast = _fetch_open_meteo_day(city_key, city_info["lat"], city_info["lon"], today_str)
+        if forecast is not None:
+            results[city_key] = forecast
 
     return results
