@@ -28,9 +28,19 @@ Or with environment overrides:
 import logging
 import os
 import signal
+import shutil
 import sys
 import time
 from datetime import datetime, timezone
+
+# ---------------------------------------------------------------------------
+# Clear bytecode cache before importing local modules to prevent stale .pyc
+# ---------------------------------------------------------------------------
+_project_dir = os.path.dirname(os.path.abspath(__file__))
+for _root, _dirs, _files in os.walk(_project_dir):
+    if "__pycache__" in _dirs:
+        shutil.rmtree(os.path.join(_root, "__pycache__"), ignore_errors=True)
+        _dirs.remove("__pycache__")
 
 # Local modules
 import config
