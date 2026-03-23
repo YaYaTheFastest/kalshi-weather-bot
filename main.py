@@ -380,8 +380,11 @@ def main() -> None:
                     )
 
             except Exception as exc:
+                import traceback
+                tb_str = traceback.format_exc()
                 logger.exception("Unhandled error in scan cycle %d: %s", cycle, exc)
-                telegram_alerts.alert_error(f"scan cycle {cycle}", exc)
+                # Send full traceback to Telegram for remote debugging
+                telegram_alerts.alert_error_with_traceback(f"scan cycle {cycle}", exc, tb_str)
                 # Back off briefly after an error
                 time.sleep(10)
 

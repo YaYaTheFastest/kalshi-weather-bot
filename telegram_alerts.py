@@ -196,6 +196,19 @@ def alert_error(context: str, exc: Exception) -> None:
     _send(text)
 
 
+def alert_error_with_traceback(context: str, exc: Exception, tb_str: str) -> None:
+    # Truncate traceback to fit Telegram's 4096 char limit
+    tb_truncated = tb_str[-2000:] if len(tb_str) > 2000 else tb_str
+    text = (
+        f"❗ <b>Bot Error</b>\n"
+        f"Context: {context}\n"
+        f"Error: {type(exc).__name__}: {str(exc)[:300]}\n"
+        f"Time: {_now_str()}\n\n"
+        f"<pre>{tb_truncated}</pre>"
+    )
+    _send(text)
+
+
 # ---------------------------------------------------------------------------
 # Gas price alerts
 # ---------------------------------------------------------------------------
