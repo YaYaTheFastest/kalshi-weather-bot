@@ -112,11 +112,11 @@ CITIES: dict = {
 # Gas-specific trading parameters
 # ---------------------------------------------------------------------------
 GAS_BUY_CONFIDENCE_THRESHOLD: float = float(
-    os.getenv("GAS_BUY_CONFIDENCE_THRESHOLD", "0.80")
-)  # Model confidence > 80%
+    os.getenv("GAS_BUY_CONFIDENCE_THRESHOLD", "0.60")
+)  # Model confidence > 60%
 GAS_BUY_MAX_PRICE: float = float(
-    os.getenv("GAS_BUY_MAX_PRICE", "0.20")
-)  # Only buy if market ask < $0.20
+    os.getenv("GAS_BUY_MAX_PRICE", "0.35")
+)  # Only buy if market ask < $0.35
 GAS_SELL_MIN_PRICE: float = float(
     os.getenv("GAS_SELL_MIN_PRICE", "0.45")
 )  # Exit if market bid > $0.45
