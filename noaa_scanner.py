@@ -1,18 +1,20 @@
 """
 noaa_scanner.py
 ---------------
-Fetches NOAA/NWS hourly weather forecasts for configured cities and
-estimates the probability (confidence) that tomorrow's high temperature
-will fall within a given temperature range (a Kalshi market bucket).
+Fetches hourly weather forecasts for configured cities and estimates the
+probability (confidence) that tomorrow's high temperature will fall within
+a given temperature range (a Kalshi market bucket).
+
+Uses Open-Meteo API (free, no key, cloud-friendly) as primary source.
+Falls back to NOAA/NWS if available. Both use the same underlying GFS/HRRR
+weather models, so accuracy is equivalent.
 
 Flow:
-  1. GET https://api.weather.gov/points/{lat},{lon}
-     -> returns JSON with forecastHourly URL
-  2. GET forecastHourly URL
-     -> returns hourly periods with temperature + temperatureUnit
-  3. Extract all hourly temps for "tomorrow" (next calendar day in local tz)
-  4. Use those to estimate a simple Gaussian confidence that the daily high
-     lands within [bucket_low, bucket_high]
+  1. GET Open-Meteo hourly forecast for each city (next 48h)
+  2. Extract all hourly temps for "tomorrow" (next calendar day)
+  3. Estimate the forecasted daily high
+  4. Use a Gaussian model to estimate confidence that the high lands
+     within a given [bucket_low, bucket_high] range
 """
 
 import logging
@@ -27,173 +29,218 @@ import config
 
 logger = logging.getLogger(__name__)
 
-# Cache NOAA grid-point lookups so we don't hammer the /points endpoint
-_GRID_CACHE: dict[str, str] = {}  # city_key -> forecastHourly URL
+# ---------------------------------------------------------------------------
+# Data classes
+# ---------------------------------------------------------------------------
+
+class CityForecast:
+    """Holds a processed forecast for one city."""
+
+    def __init__(self, city_key: str, forecast_date: date,
+                 hourly_temps: list[float], forecasted_high: float):
+        self.city_key = city_key
+        self.forecast_date = forecast_date
+        self.hourly_temps = hourly_temps
+        self.forecasted_high = forecasted_high
+        # Standard deviation of hourly temps — proxy for forecast uncertainty
+        self.temp_std = statistics.stdev(hourly_temps) if len(hourly_temps) > 1 else 3.0
+
+    def confidence_for_range(self, low: float, high: float) -> float:
+        """
+        Estimate P(daily_high in [low, high]) using a Gaussian centered on
+        the forecasted high with sigma = max(temp_std, 2.0).
+        Floor sigma at 2.0°F to avoid overconfidence on calm days.
+        """
+        sigma = max(self.temp_std, 2.0)
+        mu = self.forecasted_high
+
+        def _phi(x: float) -> float:
+            """Standard normal CDF approximation."""
+            return 0.5 * (1.0 + math.erf((x - mu) / (sigma * math.sqrt(2))))
+
+        return _phi(high) - _phi(low)
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers
+# Open-Meteo fetcher (primary — works from cloud servers)
 # ---------------------------------------------------------------------------
 
-def _get_headers() -> dict:
+OPEN_METEO_BASE = "https://api.open-meteo.com/v1/forecast"
+
+# Timezone mapping for cities
+CITY_TIMEZONES = {
+    "NYC": "America/New_York",
+    "CHI": "America/Chicago",
+    "LA": "America/Los_Angeles",
+    "MIA": "America/New_York",
+    "AUS": "America/Chicago",
+    "BOS": "America/New_York",
+    "HOU": "America/Chicago",
+    "DEN": "America/Denver",
+}
+
+
+def _fetch_open_meteo(city_key: str, lat: float, lon: float) -> Optional[CityForecast]:
+    """Fetch hourly forecast from Open-Meteo for a city."""
+    tz = CITY_TIMEZONES.get(city_key, "America/New_York")
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "hourly": "temperature_2m",
+        "temperature_unit": "fahrenheit",
+        "forecast_days": 2,
+        "timezone": tz,
+    }
+
+    try:
+        resp = requests.get(OPEN_METEO_BASE, params=params, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as exc:
+        logger.error("Open-Meteo error for %s: %s", city_key, exc)
+        return None
+
+    hourly = data.get("hourly", {})
+    times = hourly.get("time", [])
+    temps = hourly.get("temperature_2m", [])
+
+    if not times or not temps:
+        logger.warning("Open-Meteo returned empty data for %s", city_key)
+        return None
+
+    # Determine "tomorrow" in the city's local timezone
+    # Open-Meteo returns times in the requested timezone as strings like "2026-03-24T14:00"
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # Filter for tomorrow's hours
+    tomorrow_temps = []
+    for t_str, temp in zip(times, temps):
+        if temp is None:
+            continue
+        if t_str.startswith(tomorrow):
+            tomorrow_temps.append(temp)
+
+    # If no tomorrow data yet (late in the day), use today's remaining data
+    if not tomorrow_temps:
+        logger.info("No tomorrow data for %s, using today's forecast", city_key)
+        for t_str, temp in zip(times, temps):
+            if temp is None:
+                continue
+            if t_str.startswith(today_str):
+                tomorrow_temps.append(temp)
+
+    if not tomorrow_temps:
+        logger.warning("No hourly temps found for %s", city_key)
+        return None
+
+    forecasted_high = max(tomorrow_temps)
+    forecast_date = (datetime.now() + timedelta(days=1)).date()
+
+    logger.info(
+        "Open-Meteo %s: forecasted high %.1f°F (%d hourly points)",
+        city_key, forecasted_high, len(tomorrow_temps),
+    )
+
+    return CityForecast(
+        city_key=city_key,
+        forecast_date=forecast_date,
+        hourly_temps=tomorrow_temps,
+        forecasted_high=forecasted_high,
+    )
+
+
+# ---------------------------------------------------------------------------
+# NOAA/NWS fetcher (fallback — blocked on some cloud IPs)
+# ---------------------------------------------------------------------------
+
+_GRID_CACHE: dict[str, str] = {}
+
+
+def _get_noaa_headers() -> dict:
     return {"User-Agent": config.NOAA_USER_AGENT, "Accept": "application/geo+json"}
 
 
-def _get_forecast_hourly_url(city_key: str, lat: float, lon: float) -> Optional[str]:
-    """Resolve the forecastHourly endpoint for a city. Cached after first call."""
-    if city_key in _GRID_CACHE:
-        return _GRID_CACHE[city_key]
-
-    url = f"{config.NOAA_BASE_URL}/points/{lat},{lon}"
-    try:
-        resp = requests.get(url, headers=_get_headers(), timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-        forecast_url = data["properties"]["forecastHourly"]
-        _GRID_CACHE[city_key] = forecast_url
-        logger.debug("Resolved forecastHourly URL for %s: %s", city_key, forecast_url)
-        return forecast_url
-    except Exception as exc:
-        logger.error("Failed to resolve NOAA grid for %s: %s", city_key, exc)
-        return None
-
-
-def _fetch_hourly_periods(forecast_url: str) -> list[dict]:
-    """Fetch raw hourly forecast periods from NOAA."""
-    try:
-        resp = requests.get(forecast_url, headers=_get_headers(), timeout=20)
-        resp.raise_for_status()
-        return resp.json()["properties"]["periods"]
-    except Exception as exc:
-        logger.error("Failed to fetch hourly forecast from %s: %s", forecast_url, exc)
-        return []
-
-
-def _to_fahrenheit(temp: float, unit: str) -> float:
-    """Convert Celsius to Fahrenheit if needed."""
-    if unit.upper() in ("C", "CELSIUS"):
-        return temp * 9 / 5 + 32
-    return temp
-
-
-def _get_tomorrow_date() -> date:
-    """Return tomorrow's date in UTC (conservative choice)."""
-    return (datetime.now(timezone.utc) + timedelta(days=1)).date()
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-class NOAAForecast:
-    """Container for a city's processed NOAA forecast."""
-
-    def __init__(
-        self,
-        city_key: str,
-        tomorrow_temps_f: list[float],
-    ):
-        self.city_key = city_key
-        self.tomorrow_temps_f = tomorrow_temps_f
-        self.forecasted_high: float = max(tomorrow_temps_f) if tomorrow_temps_f else float("nan")
-        self.forecasted_low: float = min(tomorrow_temps_f) if tomorrow_temps_f else float("nan")
-        # Standard deviation of hourly temps — used as a proxy for forecast spread
-        self.std_dev: float = (
-            statistics.stdev(tomorrow_temps_f) if len(tomorrow_temps_f) > 1 else 3.0
-        )
-
-    def confidence_in_range(self, bucket_low: float, bucket_high: float) -> float:
-        """
-        Estimate the probability that tomorrow's actual high temperature
-        falls within [bucket_low, bucket_high].
-
-        Method: Model the forecasted high as a Gaussian with mean=forecasted_high
-        and sigma=std_dev (clipped to a minimum of 2°F to avoid overconfidence).
-        Integrate the PDF over the bucket range.
-
-        Returns a probability in [0.0, 1.0].
-        """
-        if not self.tomorrow_temps_f or math.isnan(self.forecasted_high):
-            return 0.0
-
-        sigma = max(self.std_dev, 2.0)
-        mu = self.forecasted_high
-
-        # CDF of normal distribution via math.erf
-        def normal_cdf(x: float) -> float:
-            return 0.5 * (1 + math.erf((x - mu) / (sigma * math.sqrt(2))))
-
-        prob = normal_cdf(bucket_high) - normal_cdf(bucket_low)
-        return max(0.0, min(1.0, prob))
-
-    def __repr__(self) -> str:
-        return (
-            f"NOAAForecast(city={self.city_key}, "
-            f"high={self.forecasted_high:.1f}°F, "
-            f"low={self.forecasted_low:.1f}°F, "
-            f"σ={self.std_dev:.1f}°F, "
-            f"n_hours={len(self.tomorrow_temps_f)})"
-        )
-
-
-def get_city_forecast(city_key: str) -> Optional[NOAAForecast]:
-    """
-    Fetch and parse the NOAA hourly forecast for a city.
-    Returns an NOAAForecast object, or None on failure.
-    """
-    city_cfg = config.CITIES.get(city_key)
-    if not city_cfg:
-        logger.error("Unknown city key: %s", city_key)
-        return None
-
-    lat, lon = city_cfg["lat"], city_cfg["lon"]
-    forecast_url = _get_forecast_hourly_url(city_key, lat, lon)
-    if not forecast_url:
-        return None
-
-    periods = _fetch_hourly_periods(forecast_url)
-    if not periods:
-        return None
-
-    tomorrow = _get_tomorrow_date()
-    tomorrow_temps: list[float] = []
-
-    for period in periods:
-        # startTime is ISO-8601, e.g. "2025-03-24T14:00:00-05:00"
+def _fetch_noaa(city_key: str, lat: float, lon: float) -> Optional[CityForecast]:
+    """Fetch hourly forecast from NOAA/NWS. May fail from cloud servers."""
+    # Resolve grid point
+    if city_key not in _GRID_CACHE:
+        url = f"{config.NOAA_BASE_URL}/points/{lat},{lon}"
         try:
-            start_str = period.get("startTime", "")
-            # Parse with timezone awareness
-            start_dt = datetime.fromisoformat(start_str)
-            # Compare date portion (in UTC for consistency)
-            period_date = start_dt.astimezone(timezone.utc).date()
-            if period_date == tomorrow:
-                raw_temp = period.get("temperature")
-                unit = period.get("temperatureUnit", "F")
-                if raw_temp is not None:
-                    temp_f = _to_fahrenheit(float(raw_temp), unit)
-                    tomorrow_temps.append(temp_f)
+            resp = requests.get(url, headers=_get_noaa_headers(), timeout=15)
+            resp.raise_for_status()
+            props = resp.json().get("properties", {})
+            hourly_url = props.get("forecastHourly")
+            if not hourly_url:
+                logger.error("NOAA: no forecastHourly URL for %s", city_key)
+                return None
+            _GRID_CACHE[city_key] = hourly_url
         except Exception as exc:
-            logger.debug("Skipping period due to parse error: %s", exc)
+            logger.error("NOAA grid resolve failed for %s: %s", city_key, exc)
+            return None
+
+    # Fetch hourly forecast
+    try:
+        resp = requests.get(_GRID_CACHE[city_key], headers=_get_noaa_headers(), timeout=15)
+        resp.raise_for_status()
+        periods = resp.json().get("properties", {}).get("periods", [])
+    except Exception as exc:
+        logger.error("NOAA hourly fetch failed for %s: %s", city_key, exc)
+        return None
+
+    tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).date()
+    tomorrow_temps = []
+    for p in periods:
+        try:
+            start = datetime.fromisoformat(p["startTime"])
+            if start.date() == tomorrow:
+                temp = p.get("temperature")
+                if temp is not None:
+                    tomorrow_temps.append(float(temp))
+        except (KeyError, ValueError):
             continue
 
     if not tomorrow_temps:
-        logger.warning(
-            "No tomorrow (%s) hourly data found for %s. "
-            "Periods available: %d",
-            tomorrow,
-            city_key,
-            len(periods),
-        )
+        logger.warning("NOAA: no tomorrow temps for %s", city_key)
         return None
 
-    forecast = NOAAForecast(city_key=city_key, tomorrow_temps_f=tomorrow_temps)
-    logger.info("NOAA %s: %s", city_key, forecast)
-    return forecast
+    forecasted_high = max(tomorrow_temps)
+    logger.info("NOAA %s: forecasted high %.1f°F (%d points)", city_key, forecasted_high, len(tomorrow_temps))
+
+    return CityForecast(
+        city_key=city_key,
+        forecast_date=tomorrow,
+        hourly_temps=tomorrow_temps,
+        forecasted_high=forecasted_high,
+    )
 
 
-def get_all_forecasts() -> dict[str, Optional[NOAAForecast]]:
-    """Fetch forecasts for all configured cities. Returns dict keyed by city_key."""
-    results: dict[str, Optional[NOAAForecast]] = {}
-    for city_key in config.CITIES:
-        results[city_key] = get_city_forecast(city_key)
+# ---------------------------------------------------------------------------
+# Public API — tries Open-Meteo first, falls back to NOAA
+# ---------------------------------------------------------------------------
+
+def fetch_all_forecasts() -> dict[str, CityForecast]:
+    """
+    Fetch forecasts for all configured cities.
+    Returns {city_key: CityForecast} for successful fetches.
+    """
+    results: dict[str, CityForecast] = {}
+
+    for city_key, city_info in config.CITIES.items():
+        lat = city_info["lat"]
+        lon = city_info["lon"]
+
+        # Try Open-Meteo first (works from cloud)
+        forecast = _fetch_open_meteo(city_key, lat, lon)
+
+        # Fall back to NOAA if Open-Meteo fails
+        if forecast is None:
+            logger.info("Trying NOAA fallback for %s", city_key)
+            forecast = _fetch_noaa(city_key, lat, lon)
+
+        if forecast is not None:
+            results[city_key] = forecast
+        else:
+            logger.warning("No forecast available for %s from any source", city_key)
+
     return results
