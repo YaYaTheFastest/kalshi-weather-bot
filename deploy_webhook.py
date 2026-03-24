@@ -162,8 +162,19 @@ class WebhookHandler(http.server.BaseHTTPRequestHandler):
             result = do_deploy()
             logger.info("Deploy result: %s", result["success"])
             self._respond(200, result)
+        elif parsed.path == "/run":
+            # Run an arbitrary script in the project directory
+            script = params.get("script", [None])[0]
+            if not script or not script.endswith(".py"):
+                self._respond(400, {"error": "Provide ?script=filename.py"})
+                return
+            args = params.get("args", [""])[0]
+            cmd = f"/root/weather-bot/venv/bin/python -B {BOT_DIR}/{script} {args}"
+            logger.info("Running script: %s", cmd)
+            rc, out = _run_cmd(cmd, timeout=300)  # 5 min timeout
+            self._respond(200, {"rc": rc, "output": out[-5000:]})
         else:
-            self._respond(404, {"error": "Not found. POST to /deploy"})
+            self._respond(404, {"error": "Not found. POST to /deploy or /run"})
 
     def log_message(self, format, *args):
         """Suppress default HTTP logs — we use our own logger."""
