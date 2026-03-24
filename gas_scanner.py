@@ -125,35 +125,50 @@ def fetch_aaa_prices() -> Optional[GasPriceForecast]:
         week_ago_price = None
         month_ago_price = None
 
-        # Try to find the numb class elements (AAA's price display)
-        # First price occurrence is typically the national average
+        # Extract all dollar amounts that look like gas prices
         price_matches = re.findall(r'\$(\d+\.\d{2,3})', html)
-
-        if len(price_matches) >= 1:
-            current_price = float(price_matches[0])
-
-        # Look for table with historical comparisons
-        # Pattern: Current Avg, Yesterday Avg, Week Ago Avg, Month Ago Avg
-        # Each row has Regular, Mid-Grade, Premium, Diesel, E85
-        # We want the Regular (first) column
-
-        # Find all price values that look like gas prices ($2.50-$6.00 range)
         gas_prices = [float(p) for p in price_matches if 2.0 <= float(p) <= 7.0]
 
-        if len(gas_prices) >= 4:
-            # Typical order: current regular, current mid, current premium, current diesel, current E85
-            # yesterday regular, yesterday mid, ...
-            # week ago regular, ...
-            # month ago regular, ...
-            # Each row has 5 fuel types, we want index 0, 5, 10, 15 (Regular column)
-            if len(gas_prices) >= 16:
-                current_price = gas_prices[0]
-                yesterday_price = gas_prices[5]
-                week_ago_price = gas_prices[10]
-                month_ago_price = gas_prices[15]
-            elif current_price and len(gas_prices) >= 6:
-                # Fallback: just grab what we can
-                yesterday_price = gas_prices[5] if len(gas_prices) > 5 else None
+        if len(gas_prices) < 1:
+            logger.error("No gas prices found in AAA HTML")
+            return None
+
+        # The first price is the national average hero number
+        current_price = gas_prices[0]
+
+        # Find the comparison table: 4 rows × 5 fuel types (Regular, Mid, Premium, Diesel, E85)
+        # The table starts where we see the current regular price followed by
+        # ascending values (mid > regular, premium > mid).
+        # Row 0 = Current, Row 1 = Yesterday, Row 2 = Week Ago, Row 3 = Month Ago
+        table_start = None
+        for i in range(len(gas_prices) - 4):
+            if abs(gas_prices[i] - current_price) < 0.002:  # matches national avg
+                # Check if next values look like mid-grade > regular, premium > mid
+                if (i + 2 < len(gas_prices)
+                        and gas_prices[i + 1] > gas_prices[i]
+                        and gas_prices[i + 2] > gas_prices[i + 1]):
+                    table_start = i
+                    break
+
+        if table_start is not None and table_start + 20 <= len(gas_prices):
+            # Each row has 5 columns; we want the first column (Regular)
+            current_price = gas_prices[table_start]          # Row 0, col 0
+            yesterday_price = gas_prices[table_start + 5]    # Row 1, col 0
+            week_ago_price = gas_prices[table_start + 10]    # Row 2, col 0
+            month_ago_price = gas_prices[table_start + 15]   # Row 3, col 0
+            logger.info(
+                "AAA table found at index %d: current $%.3f, yesterday $%.3f, "
+                "week_ago $%.3f, month_ago $%.3f",
+                table_start, current_price, yesterday_price,
+                week_ago_price, month_ago_price,
+            )
+        else:
+            # Fallback: use just the national average, estimate others
+            logger.warning(
+                "Could not find AAA comparison table (table_start=%s, prices=%d). "
+                "Using current price only.",
+                table_start, len(gas_prices),
+            )
 
         if current_price is None:
             logger.error("Could not parse current price from AAA")
