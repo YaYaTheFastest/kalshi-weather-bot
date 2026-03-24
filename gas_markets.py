@@ -105,36 +105,27 @@ def _parse_gas_ticker(ticker: str) -> dict:
 # Market fetcher
 # ---------------------------------------------------------------------------
 
-# Reuse the auth helpers from kalshi_client
-from kalshi_client import _get
+# Reuse helpers from kalshi_client
+from kalshi_client import _get, _fetch_markets_by_series
+
+
+# Gas price series tickers
+_GAS_SERIES = ["KXAAAGASW", "KXAAAGASM"]
 
 
 def get_gas_markets() -> list[GasMarket]:
     """
     Fetch all open gas price markets from Kalshi.
-    Looks for both KXAAAGASW (weekly) and KXAAAGASM (monthly) tickers.
+    Uses series_ticker filter for fast server-side filtering.
     """
     all_markets: list[GasMarket] = []
-    cursor = None
     today = datetime.now(timezone.utc).date()
 
-    while True:
-        params: dict = {"status": "open", "limit": 200}
-        if cursor:
-            params["cursor"] = cursor
-
-        data = _get("/markets", params=params)
-        if not data:
-            break
-
-        markets_raw = data.get("markets", [])
+    for series in _GAS_SERIES:
+        markets_raw = _fetch_markets_by_series(series)
         for m in markets_raw:
             ticker = m.get("ticker", "")
             event_ticker = m.get("event_ticker", "")
-
-            # Filter to gas price markets only
-            if "KXAAAGASW" not in ticker.upper() and "KXAAAGASM" not in ticker.upper():
-                continue
 
             # Parse prices
             yes_ask = float(m.get("yes_ask", "0") or "0")
@@ -163,10 +154,6 @@ def get_gas_markets() -> list[GasMarket]:
                 days_to_settlement=max(0, days_to_settlement),
             )
             all_markets.append(market)
-
-        cursor = data.get("cursor")
-        if not cursor or not markets_raw:
-            break
 
     weekly = [m for m in all_markets if m.market_type == "weekly"]
     monthly = [m for m in all_markets if m.market_type == "monthly"]

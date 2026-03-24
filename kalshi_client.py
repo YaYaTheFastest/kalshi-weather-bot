@@ -232,10 +232,35 @@ def _identify_city_from_ticker(ticker: str) -> Optional[str]:
     return None
 
 
+# All KXHIGH series tickers — one per city
+_TEMP_SERIES = [
+    f"KXHIGH{city['kalshi_suffix']}" for city in config.CITIES.values()
+]
+
+
+def _fetch_markets_by_series(series_ticker: str) -> list[dict]:
+    """Fetch all open markets for a single series ticker. Much faster than scanning all markets."""
+    results = []
+    cursor = None
+    while True:
+        params: dict = {"status": "open", "limit": 1000, "series_ticker": series_ticker}
+        if cursor:
+            params["cursor"] = cursor
+        data = _get("/markets", params=params)
+        if not data:
+            break
+        batch = data.get("markets", [])
+        results.extend(batch)
+        cursor = data.get("cursor")
+        if not cursor or not batch:
+            break
+    return results
+
+
 def get_temperature_markets(target_date: Optional[date] = None) -> list[KalshiMarket]:
     """
     Fetch all open KXHIGH (temperature high) markets from Kalshi.
-    Optionally filter to markets settling on target_date (tomorrow by default).
+    Uses series_ticker filter for fast server-side filtering.
 
     Returns a list of KalshiMarket objects with parsed bucket info.
     """
@@ -243,44 +268,28 @@ def get_temperature_markets(target_date: Optional[date] = None) -> list[KalshiMa
         target_date = (datetime.now(timezone.utc) + timedelta(days=1)).date()
 
     all_markets: list[KalshiMarket] = []
-    cursor = None
 
-    # Paginate through all open markets
-    while True:
-        params: dict = {"status": "open", "limit": 200}
-        if cursor:
-            params["cursor"] = cursor
-
-        data = _get("/markets", params=params)
-        if not data:
-            break
-
-        markets_raw = data.get("markets", [])
+    for series in _TEMP_SERIES:
+        markets_raw = _fetch_markets_by_series(series)
         for m in markets_raw:
             ticker = m.get("ticker", "")
             event_ticker = m.get("event_ticker", "")
 
-            # Filter to KXHIGH temperature markets only
-            if "KXHIGH" not in ticker.upper():
-                continue
-
             # Parse prices (API returns strings like "0.5600")
             yes_ask = float(m.get("yes_ask", "0") or "0")
             yes_bid = float(m.get("yes_bid", "0") or "0")
-
-            # Some responses use yes_ask_cost vs yes_ask — handle both
             if yes_ask == 0:
                 yes_ask = float(m.get("yes_ask_cost", "0") or "0")
 
             city_key = _identify_city_from_ticker(ticker)
             bucket_low, bucket_high = _parse_bucket_from_ticker(ticker, "")
 
-            # Parse market date from ticker (e.g. KXHIGHNYC-26MAR23-T72 -> 2026-03-23)
+            # Parse market date from ticker
             market_date = None
             try:
                 parts = ticker.split("-")
                 if len(parts) >= 2:
-                    date_str = parts[1]  # e.g. "26MAR23"
+                    date_str = parts[1]
                     market_date = datetime.strptime(date_str, "%y%b%d").date()
             except (ValueError, IndexError):
                 pass
@@ -299,12 +308,7 @@ def get_temperature_markets(target_date: Optional[date] = None) -> list[KalshiMa
             )
             all_markets.append(market)
 
-        # Handle pagination
-        cursor = data.get("cursor")
-        if not cursor or not markets_raw:
-            break
-
-    logger.info("Fetched %d open KXHIGH markets from Kalshi", len(all_markets))
+    logger.info("Fetched %d open KXHIGH markets from Kalshi (%d series)", len(all_markets), len(_TEMP_SERIES))
     return all_markets
 
 
