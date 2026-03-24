@@ -1,18 +1,13 @@
 """
-gas_engine.py
+oil_engine.py
 -------------
-Decision engine for gas price markets. Compares AAA gas price forecasts
+Decision engine for WTI crude oil markets. Compares oil price forecasts
 against Kalshi market prices to generate buy/sell signals.
 
-Buy signal logic:
-  - Kalshi market asks "Will gas be ABOVE $X.XX?" at settlement
-  - We estimate P(gas > X.XX) from current AAA data + trend model
-  - If our confidence >> market price, there's an edge → buy YES
-  - If our confidence << (1 - market price), the price is too high → buy NO
-    (but we only trade YES side for simplicity in v1)
-
-Sell signal logic:
-  - Same as weather bot: exit when bid price rises above SELL_MIN_PRICE
+Uses the same edge-based entry logic as gas_engine.py:
+  - edge >= COMMODITY_MIN_EDGE
+  - confidence >= COMMODITY_MIN_CONFIDENCE
+  - ask <= COMMODITY_MAX_ASK
 """
 
 import logging
@@ -20,15 +15,11 @@ from dataclasses import dataclass
 from typing import Optional
 
 import config
-from gas_scanner import GasPriceForecast  # alias for CommodityForecast
-from gas_markets import GasMarket
+from price_model import CommodityForecast
+from oil_markets import OilMarket
 from kalshi_client import KalshiPosition
 
 logger = logging.getLogger(__name__)
-
-
-# Gas-specific thresholds are defined in config.py and can be
-# overridden via environment variables in .env.
 
 
 # ---------------------------------------------------------------------------
@@ -36,21 +27,21 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 @dataclass
-class GasBuySignal:
-    """Recommended buy on a gas price market."""
-    market: GasMarket
-    model_confidence: float     # 0.0 – 1.0, P(price > strike) or P(price <= strike)
-    market_price: float         # yes_ask in dollars
-    current_gas_price: float    # Current AAA national average
+class OilBuySignal:
+    """Recommended buy on a WTI oil market."""
+    market: OilMarket
+    model_confidence: float     # 0.0 – 1.0
+    market_price: float         # yes_ask or no_price in dollars
+    current_oil_price: float    # Current WTI price
     projected_price: float      # Model's projected settlement price
     edge: float                 # model_confidence - market_price
     direction: str              # "above" (YES) or "below" (NO)
 
     def __str__(self) -> str:
         return (
-            f"GAS BUY {self.market.ticker} | "
-            f"Strike: ${self.market.strike_price:.3f} | "
-            f"Current AAA: ${self.current_gas_price:.3f} | "
+            f"OIL BUY {self.market.ticker} | "
+            f"Strike: ${self.market.strike_price:.2f} | "
+            f"Current WTI: ${self.current_oil_price:.2f} | "
             f"Model conf: {self.model_confidence:.1%} | "
             f"Ask: ${self.market_price:.2f} | "
             f"Edge: {self.edge:.1%} | "
@@ -60,16 +51,16 @@ class GasBuySignal:
 
 
 @dataclass
-class GasSellSignal:
-    """Recommended exit of a gas market position."""
+class OilSellSignal:
+    """Recommended exit of an oil market position."""
     position: KalshiPosition
-    market: Optional[GasMarket]
+    market: Optional[OilMarket]
     bid_price: float
     reason: str
 
     def __str__(self) -> str:
         return (
-            f"GAS SELL {self.position.ticker} | "
+            f"OIL SELL {self.position.ticker} | "
             f"Reason: {self.reason} | "
             f"Bid: ${self.bid_price:.2f}"
         )
@@ -79,27 +70,24 @@ class GasSellSignal:
 # Signal generators
 # ---------------------------------------------------------------------------
 
-def generate_gas_buy_signals(
-    forecast: GasPriceForecast,
-    open_markets: list[GasMarket],
+def generate_oil_buy_signals(
+    forecast: CommodityForecast,
+    open_markets: list[OilMarket],
     held_tickers: set[str],
-) -> list[GasBuySignal]:
+) -> list[OilBuySignal]:
     """
-    Scan all open gas price markets against our price forecast.
+    Scan all open oil markets against our price forecast.
     Returns a ranked list of buy signals (highest edge first).
     """
-    signals: list[GasBuySignal] = []
+    signals: list[OilBuySignal] = []
 
     for market in open_markets:
-        # Skip markets we already own
         if market.ticker in held_tickers:
             continue
 
-        # Skip if no liquidity
         if market.yes_ask <= 0:
             continue
 
-        # Skip if ask exceeds max
         if market.yes_ask > config.COMMODITY_MAX_ASK:
             continue
 
@@ -107,7 +95,7 @@ def generate_gas_buy_signals(
         forecast.days_to_settlement = market.days_to_settlement
         forecast.drift_dampening = config.COMMODITY_DRIFT_DAMPENING
 
-        # Compute our model's probability that gas > strike
+        # Compute probability that oil > strike
         prob_above = forecast.confidence_above(market.strike_price)
 
         # Projected settlement price (for logging)
@@ -120,31 +108,30 @@ def generate_gas_buy_signals(
         projected = forecast.current_price + daily_drift * days
 
         logger.debug(
-            "GAS %s | strike $%.3f | current $%.3f | projected $%.3f | "
+            "OIL %s | strike $%.2f | current $%.2f | projected $%.2f | "
             "P(above)=%.1f%% | ask $%.2f | days=%d",
             market.ticker, market.strike_price, forecast.current_price,
             projected, prob_above * 100, market.yes_ask, market.days_to_settlement,
         )
 
         # YES side: edge-based entry
-        # edge = model_confidence - market_ask_price
         yes_edge = prob_above - market.yes_ask
         if (
             yes_edge >= config.COMMODITY_MIN_EDGE
             and prob_above >= config.COMMODITY_MIN_CONFIDENCE
             and market.yes_ask <= config.COMMODITY_MAX_ASK
         ):
-            signal = GasBuySignal(
+            signal = OilBuySignal(
                 market=market,
                 model_confidence=prob_above,
                 market_price=market.yes_ask,
-                current_gas_price=forecast.current_price,
+                current_oil_price=forecast.current_price,
                 projected_price=projected,
                 edge=yes_edge,
                 direction="above",
             )
             signals.append(signal)
-            logger.info("GAS BUY SIGNAL: %s", signal)
+            logger.info("OIL BUY SIGNAL: %s", signal)
 
         # NO side: edge-based entry
         no_price = 1.0 - market.yes_bid if market.yes_bid > 0 else 1.0 - market.yes_ask
@@ -156,54 +143,53 @@ def generate_gas_buy_signals(
             and no_price <= config.COMMODITY_MAX_ASK
             and no_price > 0
         ):
-            signal = GasBuySignal(
+            signal = OilBuySignal(
                 market=market,
                 model_confidence=prob_below,
                 market_price=no_price,
-                current_gas_price=forecast.current_price,
+                current_oil_price=forecast.current_price,
                 projected_price=projected,
                 edge=no_edge,
                 direction="below",
             )
             signals.append(signal)
-            logger.info("GAS BUY SIGNAL (NO side): %s", signal)
+            logger.info("OIL BUY SIGNAL (NO side): %s", signal)
 
-    # Sort by edge descending
     signals.sort(key=lambda s: s.edge, reverse=True)
     return signals
 
 
-def generate_gas_sell_signals(
+def generate_oil_sell_signals(
     positions: list[KalshiPosition],
-    open_markets: list[GasMarket],
-) -> list[GasSellSignal]:
+    open_markets: list[OilMarket],
+) -> list[OilSellSignal]:
     """
-    Check gas positions for exit opportunities.
+    Check oil positions for exit opportunities.
     Returns sell signals when bid > COMMODITY_SELL_MIN_PRICE.
     """
     market_by_ticker = {m.ticker: m for m in open_markets}
-    signals: list[GasSellSignal] = []
+    signals: list[OilSellSignal] = []
 
     for position in positions:
         if position.market_exposure <= 0:
             continue
 
-        # Only process gas market positions
+        # Only process oil market positions
         ticker_upper = position.ticker.upper()
-        if "KXAAAGASW" not in ticker_upper and "KXAAAGASM" not in ticker_upper:
+        if "KXWTI" not in ticker_upper:
             continue
 
         market = market_by_ticker.get(position.ticker)
         bid = market.yes_bid if market else 0.0
 
         if bid > config.COMMODITY_SELL_MIN_PRICE:
-            signal = GasSellSignal(
+            signal = OilSellSignal(
                 position=position,
                 market=market,
                 bid_price=bid,
                 reason="take_profit",
             )
             signals.append(signal)
-            logger.info("GAS SELL SIGNAL: %s", signal)
+            logger.info("OIL SELL SIGNAL: %s", signal)
 
     return signals

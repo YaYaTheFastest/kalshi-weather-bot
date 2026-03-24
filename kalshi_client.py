@@ -237,6 +237,9 @@ _TEMP_SERIES = [
     f"KXHIGH{city['kalshi_suffix']}" for city in config.CITIES.values()
 ]
 
+# WTI crude oil series tickers
+_OIL_SERIES = ["KXWTI", "KXWTIW"]
+
 
 def _fetch_markets_by_series(series_ticker: str) -> list[dict]:
     """Fetch all open markets for a single series ticker. Much faster than scanning all markets."""

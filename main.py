@@ -53,6 +53,9 @@ from decision_engine import generate_buy_signals, generate_sell_signals
 from gas_engine import generate_gas_buy_signals, generate_gas_sell_signals
 from gas_markets import get_gas_markets
 from gas_scanner import fetch_gas_forecast
+from oil_engine import generate_oil_buy_signals, generate_oil_sell_signals
+from oil_markets import get_oil_markets
+from oil_scanner import fetch_oil_forecast
 from kalshi_client import (
     get_balance,
     get_positions,
@@ -68,6 +71,7 @@ from risk_manager import RiskLimitExceeded, risk_manager
 # ---------------------------------------------------------------------------
 ENABLE_WEATHER: bool = os.getenv("ENABLE_WEATHER", "true").lower() in ("true", "1", "yes")
 ENABLE_GAS: bool = os.getenv("ENABLE_GAS", "true").lower() in ("true", "1", "yes")
+ENABLE_OIL: bool = os.getenv("ENABLE_OIL", "true").lower() in ("true", "1", "yes")
 
 # ---------------------------------------------------------------------------
 # Logging setup
@@ -174,6 +178,7 @@ def run_scan_cycle(cycle_number: int) -> dict:
         "cities_scanned": 0,
         "weather_markets": 0,
         "gas_markets": 0,
+        "oil_markets": 0,
         "buy_signals": 0,
         "sell_signals": 0,
         "buys_executed": 0,
@@ -259,6 +264,45 @@ def run_scan_cycle(cycle_number: int) -> dict:
             logger.info("No open gas markets found")
 
     # ====================================================================
+    # OIL PRICE MARKETS
+    # ====================================================================
+    if ENABLE_OIL:
+        logger.info("=== Cycle %d: Oil price scan ===", cycle_number)
+
+        open_oil_markets = get_oil_markets()
+        stats["oil_markets"] = len(open_oil_markets)
+
+        if open_oil_markets:
+            min_days = min(m.days_to_settlement for m in open_oil_markets)
+
+            oil_forecast = fetch_oil_forecast(days_to_settlement=min_days)
+
+            if oil_forecast:
+                logger.info(
+                    "Oil: WTI $%.2f | trend $%+.2f/day | %d markets",
+                    oil_forecast.current_price,
+                    oil_forecast.daily_change,
+                    len(open_oil_markets),
+                )
+
+                # Oil sell signals
+                oil_sells = generate_oil_sell_signals(live_positions, open_oil_markets)
+                for sig in oil_sells:
+                    all_sell_signals.append((sig, "oil"))
+
+                # Oil buy signals
+                oil_buys = generate_oil_buy_signals(
+                    oil_forecast, open_oil_markets, held_tickers
+                )
+                for sig in oil_buys:
+                    all_buy_signals.append((sig, "oil"))
+            else:
+                logger.warning("Failed to fetch oil price data")
+                stats["errors"] += 1
+        else:
+            logger.info("No open oil markets found")
+
+    # ====================================================================
     # EXECUTE SELLS (exits first — frees up capacity)
     # ====================================================================
     stats["sell_signals"] = len(all_sell_signals)
@@ -285,6 +329,8 @@ def run_scan_cycle(cycle_number: int) -> dict:
         # Send appropriate alert based on market type
         if market_type == "weather":
             telegram_alerts.alert_sell_executed(sell_signal, result, proceeds)
+        elif market_type == "oil":
+            telegram_alerts.alert_oil_sell_executed(sell_signal, result, proceeds)
         else:
             telegram_alerts.alert_gas_sell_executed(sell_signal, result, proceeds)
 
@@ -308,7 +354,7 @@ def run_scan_cycle(cycle_number: int) -> dict:
         if market_type == "weather":
             ticker = buy_signal.market.ticker
             ask_price = buy_signal.market.yes_ask
-        else:  # gas
+        else:  # gas or oil — commodity markets
             ticker = buy_signal.market.ticker
             ask_price = buy_signal.market_price  # Could be YES or NO side price
 
@@ -342,6 +388,8 @@ def run_scan_cycle(cycle_number: int) -> dict:
         # Send appropriate alert
         if market_type == "weather":
             telegram_alerts.alert_buy_executed(buy_signal, result, num_contracts, cost_usd)
+        elif market_type == "oil":
+            telegram_alerts.alert_oil_buy_executed(buy_signal, result, num_contracts, cost_usd)
         else:
             telegram_alerts.alert_gas_buy_executed(buy_signal, result, num_contracts, cost_usd)
 
@@ -372,7 +420,7 @@ def main() -> None:
     logger.info("=" * 60)
     logger.info("Kalshi Trading Bot starting up")
     logger.info("Mode: %s", "DRY RUN" if config.DRY_RUN else "LIVE TRADING")
-    logger.info("Markets: Weather=%s | Gas=%s", ENABLE_WEATHER, ENABLE_GAS)
+    logger.info("Markets: Weather=%s | Gas=%s | Oil=%s", ENABLE_WEATHER, ENABLE_GAS, ENABLE_OIL)
     logger.info("Scan interval: %ds", config.SCAN_INTERVAL_SECONDS)
     logger.info("PID: %d", os.getpid())
     logger.info("=" * 60)
@@ -395,7 +443,7 @@ def main() -> None:
                 if cycle % SUMMARY_EVERY_N_CYCLES == 0:
                     telegram_alerts.alert_scan_summary(
                         cities_scanned=stats["cities_scanned"],
-                        markets_checked=stats["weather_markets"] + stats["gas_markets"],
+                        markets_checked=stats["weather_markets"] + stats["gas_markets"] + stats["oil_markets"],
                         buy_signals=stats["buy_signals"],
                         sell_signals=stats["sell_signals"],
                         open_positions=risk_manager.open_position_count,

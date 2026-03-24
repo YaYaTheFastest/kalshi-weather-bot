@@ -84,6 +84,9 @@ def alert_bot_started() -> None:
         markets_str.append(f"Weather ({len(config.CITIES)} cities)")
     if gas_on:
         markets_str.append("Gas Prices (weekly + monthly)")
+    oil_on = os.getenv("ENABLE_OIL", "true").lower() in ("true", "1", "yes")
+    if oil_on:
+        markets_str.append("WTI Oil (daily + weekly)")
     text = (
         f"🤖 <b>Kalshi Trading Bot Started</b>\n"
         f"Mode: <b>{mode}</b>\n"
@@ -240,6 +243,49 @@ def alert_gas_sell_executed(signal, result: OrderResult, proceeds_usd: float) ->
     status = "✅ Filled" if result.success else "❌ Failed"
     text = (
         f"{_dry_tag()}⛽📉 <b>GAS SELL ORDER {status}</b>\n"
+        f"Ticker: <code>{signal.position.ticker}</code>\n"
+        f"Reason: {signal.reason}\n"
+        f"Bid price: ${signal.bid_price:.2f}\n"
+        f"Proceeds: ${proceeds_usd:.2f}\n"
+        f"Order ID: {result.order_id or 'n/a'}\n"
+        f"Time: {_now_str()}"
+    )
+    if not result.success:
+        text += f"\nError: {result.error}"
+    _send(text)
+
+
+# ---------------------------------------------------------------------------
+# Oil price alerts
+# ---------------------------------------------------------------------------
+
+def alert_oil_buy_executed(signal, result: OrderResult, num_contracts: int, cost_usd: float) -> None:
+    status = "\u2705 Filled" if result.success else "\u274c Failed"
+    text = (
+        f"{_dry_tag()}\U0001f6e2\ufe0f\U0001f4c8 <b>OIL BUY ORDER {status}</b>\n"
+        f"Ticker: <code>{signal.market.ticker}</code>\n"
+        f"Strike: ${signal.market.strike_price:.2f}\n"
+        f"Direction: {signal.direction.upper()}\n"
+        f"Type: {signal.market.market_type}\n"
+        f"Contracts: {num_contracts}\n"
+        f"Price: ${signal.market_price:.2f} | Cost: ${cost_usd:.2f}\n"
+        f"Model confidence: {signal.model_confidence:.1%}\n"
+        f"Current WTI: ${signal.current_oil_price:.2f}\n"
+        f"Projected: ${signal.projected_price:.2f}\n"
+        f"Edge: {signal.edge:.1%}\n"
+        f"Settles in: {signal.market.days_to_settlement}d\n"
+        f"Order ID: {result.order_id or 'n/a'}\n"
+        f"Time: {_now_str()}"
+    )
+    if not result.success:
+        text += f"\nError: {result.error}"
+    _send(text)
+
+
+def alert_oil_sell_executed(signal, result: OrderResult, proceeds_usd: float) -> None:
+    status = "\u2705 Filled" if result.success else "\u274c Failed"
+    text = (
+        f"{_dry_tag()}\U0001f6e2\ufe0f\U0001f4c9 <b>OIL SELL ORDER {status}</b>\n"
         f"Ticker: <code>{signal.position.ticker}</code>\n"
         f"Reason: {signal.reason}\n"
         f"Bid price: ${signal.bid_price:.2f}\n"

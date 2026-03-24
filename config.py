@@ -109,17 +109,23 @@ CITIES: dict = {
 }
 
 # ---------------------------------------------------------------------------
-# Gas-specific trading parameters
+# Commodity market entry (shared by gas, oil, etc.)
 # ---------------------------------------------------------------------------
-GAS_BUY_CONFIDENCE_THRESHOLD: float = float(
-    os.getenv("GAS_BUY_CONFIDENCE_THRESHOLD", "0.60")
-)  # Model confidence > 60%
-GAS_BUY_MAX_PRICE: float = float(
-    os.getenv("GAS_BUY_MAX_PRICE", "0.35")
-)  # Only buy if market ask < $0.35
-GAS_SELL_MIN_PRICE: float = float(
-    os.getenv("GAS_SELL_MIN_PRICE", "0.45")
-)  # Exit if market bid > $0.45
+COMMODITY_MIN_EDGE: float = float(
+    os.getenv("COMMODITY_MIN_EDGE", "0.20")
+)  # 20¢ minimum edge
+COMMODITY_MIN_CONFIDENCE: float = float(
+    os.getenv("COMMODITY_MIN_CONFIDENCE", "0.55")
+)  # 55% min confidence
+COMMODITY_MAX_ASK: float = float(
+    os.getenv("COMMODITY_MAX_ASK", "0.50")
+)  # 50¢ max ask
+COMMODITY_SELL_MIN_PRICE: float = float(
+    os.getenv("COMMODITY_SELL_MIN_PRICE", "0.50")
+)  # Take profit threshold
+COMMODITY_DRIFT_DAMPENING: float = float(
+    os.getenv("COMMODITY_DRIFT_DAMPENING", "0.60")
+)  # Mean reversion dampening
 
 # ---------------------------------------------------------------------------
 # Logging
