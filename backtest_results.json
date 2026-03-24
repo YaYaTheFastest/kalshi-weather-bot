@@ -1,0 +1,40 @@
+{
+  "run_date": "2026-03-24",
+  "markets_analyzed": {},
+  "current_params": {
+    "params": {
+      "min_edge": 0.2,
+      "min_confidence": 0.55,
+      "max_ask": 0.5,
+      "drift_dampening": 0.6,
+      "sell_threshold": 0.5
+    },
+    "total_pnl": 0.0,
+    "win_rate": 0.0,
+    "num_trades": 0,
+    "avg_edge": 0.0,
+    "sharpe": 0.0,
+    "max_drawdown": 0.0
+  },
+  "optimal_params": {
+    "params": {
+      "min_edge": 0.2,
+      "min_confidence": 0.55,
+      "max_ask": 0.5,
+      "drift_dampening": 0.6,
+      "sell_threshold": 0.5
+    },
+    "total_pnl": 0.0,
+    "win_rate": 0.0,
+    "num_trades": 0,
+    "avg_edge": 0.0,
+    "sharpe": 0.0,
+    "max_drawdown": 0.0,
+    "improvement_vs_current": "N/A"
+  },
+  "top_10_param_sets": [],
+  "market_breakdown": {},
+  "insights": [
+    "No settled markets \u2014 run with Kalshi credentials"
+  ]
+}
