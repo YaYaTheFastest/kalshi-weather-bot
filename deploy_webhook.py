@@ -71,9 +71,18 @@ def do_deploy() -> dict:
     _run_cmd("find . -name __pycache__ -exec rm -rf {} + 2>/dev/null; true")
     steps.append({"step": "clear_pycache", "rc": 0})
 
-    # 3. Restart service
+    # 3. Restart bot service
     rc, out = _run_cmd(f"systemctl restart {SERVICE_NAME}")
     steps.append({"step": "restart_service", "rc": rc, "output": out})
+
+    # 3b. Restart webhook service (to pick up code changes)
+    # Do this in background so the current request can still respond
+    import threading
+    def _restart_webhook():
+        time.sleep(2)
+        os.system("systemctl restart deploy-webhook")
+    threading.Thread(target=_restart_webhook, daemon=True).start()
+    steps.append({"step": "webhook_restart_scheduled", "rc": 0})
     if rc != 0:
         return {"success": False, "steps": steps, "error": "restart failed"}
 
