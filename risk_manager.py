@@ -89,10 +89,10 @@ class RiskManager:
             logger.info("Position closed (settled or sold): %s", ticker)
         self._open_tickers = self._open_tickers.intersection(live_tickers) | live_tickers
 
-        # Update unrealized P&L from live data
-        total_unrealized = sum(p.unrealized_pnl for p in live_positions)
+        # Update P&L from live data (API returns dollar fields directly)
+        total_exposure = sum(p.market_exposure_dollars for p in live_positions)
         total_realized = sum(p.realized_pnl for p in live_positions)
-        self._daily_pnl = total_realized + total_unrealized
+        self._daily_pnl = total_realized
         logger.debug(
             "Risk sync: %d open positions | daily P&L $%.2f",
             len(self._open_tickers),

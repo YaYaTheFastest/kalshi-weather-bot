@@ -140,7 +140,7 @@ def alert_sell_executed(signal: SellSignal, result: OrderResult, proceeds_usd: f
         f"Reason: {signal.reason}\n"
         f"Bid price: ${signal.bid_price:.2f}\n"
         f"Proceeds: ${proceeds_usd:.2f}\n"
-        f"Unrealized P&amp;L: ${signal.position.unrealized_pnl:.2f}\n"
+        f"Exposure: ${signal.position.market_exposure_dollars:.2f}\n"
         f"Order ID: {result.order_id or 'n/a'}\n"
         f"Time: {_now_str()}"
     )

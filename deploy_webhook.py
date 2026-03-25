@@ -71,27 +71,37 @@ def do_deploy() -> dict:
     _run_cmd("find . -name __pycache__ -exec rm -rf {} + 2>/dev/null; true")
     steps.append({"step": "clear_pycache", "rc": 0})
 
-    # 3. Restart bot service
-    rc, out = _run_cmd(f"systemctl restart {SERVICE_NAME}")
-    steps.append({"step": "restart_service", "rc": rc, "output": out})
+    # 3. Only restart bot service if it's currently enabled
+    #    This prevents a deploy from accidentally overriding a manual pause/disable.
+    rc_enabled, enabled_out = _run_cmd(f"systemctl is-enabled {SERVICE_NAME}")
+    bot_enabled = enabled_out.strip() == "enabled"
+    
+    if bot_enabled:
+        rc, out = _run_cmd(f"systemctl restart {SERVICE_NAME}")
+        steps.append({"step": "restart_service", "rc": rc, "output": out})
+        if rc != 0:
+            return {"success": False, "steps": steps, "error": "restart failed"}
+    else:
+        steps.append({"step": "restart_service", "rc": 0, "output": "SKIPPED — service is disabled (paused). Will not auto-restart."})
+        logger.info("Bot service is disabled — skipping restart on deploy")
 
     # 3b. Restart webhook service (to pick up code changes)
     # Do this in background so the current request can still respond
-    import threading
+    import time as _time
     def _restart_webhook():
-        time.sleep(2)
+        _time.sleep(2)
         os.system("systemctl restart deploy-webhook")
     threading.Thread(target=_restart_webhook, daemon=True).start()
     steps.append({"step": "webhook_restart_scheduled", "rc": 0})
-    if rc != 0:
-        return {"success": False, "steps": steps, "error": "restart failed"}
 
     # 4. Check service status
     rc, out = _run_cmd(f"systemctl is-active {SERVICE_NAME}")
     steps.append({"step": "verify_active", "rc": rc, "output": out})
 
     return {
-        "success": out.strip() == "active",
+        "success": True,  # deploy itself succeeded even if bot stays stopped
+        "bot_running": out.strip() == "active",
+        "bot_enabled": bot_enabled,
         "steps": steps,
         "time": datetime.now(timezone.utc).isoformat(),
     }

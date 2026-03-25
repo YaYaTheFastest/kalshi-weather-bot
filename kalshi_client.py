@@ -58,10 +58,10 @@ class KalshiMarket:
 class KalshiPosition:
     """An open position we hold."""
     ticker: str
-    market_exposure: int     # contracts held (positive = long YES)
+    market_exposure: int     # contracts held (from position_fp)
     realized_pnl: float      # realized P&L in dollars
-    unrealized_pnl: float    # unrealized P&L in dollars
-    position_value: float    # current market value in dollars
+    total_traded: float      # total traded in dollars
+    market_exposure_dollars: float  # market exposure in dollars
 
 
 @dataclass
@@ -338,24 +338,39 @@ def get_balance() -> float:
 
 
 def get_positions() -> list[KalshiPosition]:
-    """Fetch all current open positions. Returns list of KalshiPosition."""
-    data = _get("/portfolio/positions")
+    """Fetch all current open positions. Returns list of KalshiPosition.
+    
+    Uses correct Kalshi API v2 field names:
+      - position_fp: number of contracts (fractional, but we cast to int)
+      - market_exposure_dollars: exposure in dollars (string)
+      - total_traded_dollars: total traded value in dollars (string)
+      - realized_pnl_dollars: realized P&L in dollars (string)
+    """
+    data = _get("/portfolio/positions", params={"settlement_status": "unsettled"})
     if not data:
         return []
 
     positions: list[KalshiPosition] = []
     for p in data.get("market_positions", []):
         ticker = p.get("ticker", "")
-        exposure = int(p.get("market_exposure", 0))
+        # position_fp is the contract count (API returns int or float)
+        position_fp = p.get("position_fp", 0)
+        exposure = int(position_fp) if position_fp else 0
         if exposure == 0:
             continue  # skip flat positions
+        
+        # Dollar fields come as strings from the API
+        realized_pnl = float(p.get("realized_pnl_dollars", 0) or 0)
+        total_traded = float(p.get("total_traded_dollars", 0) or 0)
+        market_exp_dollars = float(p.get("market_exposure_dollars", 0) or 0)
+        
         positions.append(
             KalshiPosition(
                 ticker=ticker,
                 market_exposure=exposure,
-                realized_pnl=float(p.get("realized_pnl", 0)) / 100.0,
-                unrealized_pnl=float(p.get("unrealized_pnl", 0)) / 100.0,
-                position_value=float(p.get("total_traded", 0)) / 100.0,
+                realized_pnl=realized_pnl,
+                total_traded=total_traded,
+                market_exposure_dollars=market_exp_dollars,
             )
         )
     logger.info("Open positions: %d", len(positions))

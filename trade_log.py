@@ -83,9 +83,12 @@ def update_log():
         ticker = f.get("ticker", "")
         action = f.get("action", "")  # buy or sell
         side = f.get("side", "")  # yes or no
-        count = int(f.get("count", 0))
-        price_cents = int(f.get("yes_price", 0) or f.get("no_price", 0) or 0)
-        price_dollars = price_cents / 100.0
+        # API v2 returns count_fp and prices in dollars (as strings)
+        count = int(f.get("count_fp", 0) or f.get("count", 0) or 0)
+        # Prices are already in dollars (strings like "0.14")
+        yes_price_str = f.get("yes_price_dollars") or f.get("yes_price", 0)
+        no_price_str = f.get("no_price_dollars") or f.get("no_price", 0)
+        price_dollars = float(yes_price_str or 0) or float(no_price_str or 0)
         cost = count * price_dollars
         created = f.get("created_time", "")
 
