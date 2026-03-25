@@ -70,7 +70,7 @@ from risk_manager import RiskLimitExceeded, risk_manager
 # ---------------------------------------------------------------------------
 # Feature flags — enable/disable market types
 # ---------------------------------------------------------------------------
-ENABLE_WEATHER: bool = os.getenv("ENABLE_WEATHER", "true").lower() in ("true", "1", "yes")
+ENABLE_WEATHER: bool = os.getenv("ENABLE_WEATHER", "false").lower() in ("true", "1", "yes")
 ENABLE_GAS: bool = os.getenv("ENABLE_GAS", "true").lower() in ("true", "1", "yes")
 ENABLE_OIL: bool = os.getenv("ENABLE_OIL", "true").lower() in ("true", "1", "yes")
 
