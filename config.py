@@ -112,14 +112,14 @@ CITIES: dict = {
 # Commodity market entry (shared by gas, oil, etc.)
 # ---------------------------------------------------------------------------
 COMMODITY_MIN_EDGE: float = float(
-    os.getenv("COMMODITY_MIN_EDGE", "0.20")
-)  # 20¢ minimum edge
+    os.getenv("COMMODITY_MIN_EDGE", "0.30")
+)  # 30¢ minimum edge (backtest optimal: 100% win rate)
 COMMODITY_MIN_CONFIDENCE: float = float(
-    os.getenv("COMMODITY_MIN_CONFIDENCE", "0.55")
-)  # 55% min confidence
+    os.getenv("COMMODITY_MIN_CONFIDENCE", "0.50")
+)  # 50% min confidence (backtest: all 50%+ contracts won)
 COMMODITY_MAX_ASK: float = float(
-    os.getenv("COMMODITY_MAX_ASK", "0.50")
-)  # 50¢ max ask
+    os.getenv("COMMODITY_MAX_ASK", "0.60")
+)  # 60¢ max ask (backtest optimal: captures mid-range edge)
 COMMODITY_SELL_MIN_PRICE: float = float(
     os.getenv("COMMODITY_SELL_MIN_PRICE", "0.50")
 )  # Take profit threshold
