@@ -8,4 +8,4 @@ positions = get_positions()
 print(f"Balance: ${balance:.2f}")
 print(f"Open positions: {len(positions)}")
 for p in positions:
-    print(f"  {p.ticker} | contracts={p.market_exposure} | exposure=${p.market_exposure_dollars:.2f} | traded=${p.total_traded:.2f} | pnl=${p.realized_pnl:.2f}")
+    print(f"  {p.ticker} | contracts={p.market_exposure} | exposure=${p.market_exposure_dollars:.2f} | traded=${p.total_traded:.2f} | fees=${p.fees_paid:.2f} | pnl=${p.realized_pnl:.2f}")

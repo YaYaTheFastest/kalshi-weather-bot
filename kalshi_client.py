@@ -62,6 +62,7 @@ class KalshiPosition:
     realized_pnl: float      # realized P&L in dollars
     total_traded: float      # total traded in dollars
     market_exposure_dollars: float  # market exposure in dollars
+    fees_paid: float = 0.0   # total fees paid on this position in dollars
 
 
 @dataclass
@@ -363,6 +364,7 @@ def get_positions() -> list[KalshiPosition]:
         realized_pnl = float(p.get("realized_pnl_dollars", 0) or 0)
         total_traded = float(p.get("total_traded_dollars", 0) or 0)
         market_exp_dollars = float(p.get("market_exposure_dollars", 0) or 0)
+        fees_paid = float(p.get("fees_paid_dollars", 0) or 0)
         
         positions.append(
             KalshiPosition(
@@ -371,6 +373,7 @@ def get_positions() -> list[KalshiPosition]:
                 realized_pnl=realized_pnl,
                 total_traded=total_traded,
                 market_exposure_dollars=market_exp_dollars,
+                fees_paid=fees_paid,
             )
         )
     logger.info("Open positions: %d", len(positions))

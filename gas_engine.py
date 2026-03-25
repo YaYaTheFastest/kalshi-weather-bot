@@ -197,13 +197,18 @@ def generate_gas_sell_signals(
         market = market_by_ticker.get(position.ticker)
         bid = market.yes_bid if market else 0.0
 
-        # Compute cost basis per contract to avoid selling at a loss
+        # Compute cost basis per contract INCLUDING fees to avoid selling at a loss.
+        # True cost = (exposure + buy fees) / contracts.
+        # Also estimate sell-side fee (~2¢/contract) so we only sell when actually profitable.
         cost_per_contract = 0.0
         if position.market_exposure > 0 and position.market_exposure_dollars > 0:
-            cost_per_contract = position.market_exposure_dollars / position.market_exposure
+            total_cost_with_fees = position.market_exposure_dollars + position.fees_paid
+            cost_per_contract = total_cost_with_fees / position.market_exposure
+        # Add estimated sell fee (~$0.02/contract) to break-even threshold
+        breakeven = cost_per_contract + 0.02
 
-        # Only sell if bid exceeds BOTH the min price floor AND our cost basis
-        if bid > config.COMMODITY_SELL_MIN_PRICE and bid > cost_per_contract:
+        # Only sell if bid exceeds BOTH the min price floor AND our break-even
+        if bid > config.COMMODITY_SELL_MIN_PRICE and bid > breakeven:
             signal = GasSellSignal(
                 position=position,
                 market=market,
@@ -211,11 +216,11 @@ def generate_gas_sell_signals(
                 reason="take_profit",
             )
             signals.append(signal)
-            logger.info("GAS SELL SIGNAL: %s (cost basis $%.2f/contract)", signal, cost_per_contract)
+            logger.info("GAS SELL SIGNAL: %s (breakeven $%.3f incl fees)", signal, breakeven)
         elif bid > config.COMMODITY_SELL_MIN_PRICE:
             logger.debug(
-                "GAS sell skipped %s: bid $%.2f <= cost basis $%.2f",
-                position.ticker, bid, cost_per_contract,
+                "GAS sell skipped %s: bid $%.2f <= breakeven $%.3f (cost $%.3f + fees)",
+                position.ticker, bid, breakeven, cost_per_contract,
             )
 
     return signals
