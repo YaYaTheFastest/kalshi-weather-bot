@@ -353,9 +353,9 @@ def get_positions() -> list[KalshiPosition]:
     positions: list[KalshiPosition] = []
     for p in data.get("market_positions", []):
         ticker = p.get("ticker", "")
-        # position_fp is the contract count (API returns int or float)
+        # position_fp is the contract count (API returns as string like '6.00')
         position_fp = p.get("position_fp", 0)
-        exposure = int(position_fp) if position_fp else 0
+        exposure = int(float(position_fp)) if position_fp else 0
         if exposure == 0:
             continue  # skip flat positions
         
