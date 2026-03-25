@@ -165,7 +165,8 @@ def generate_oil_sell_signals(
 ) -> list[OilSellSignal]:
     """
     Check oil positions for exit opportunities.
-    Returns sell signals when bid > COMMODITY_SELL_MIN_PRICE.
+    Only sells when bid > COMMODITY_SELL_MIN_PRICE AND bid > cost basis per contract.
+    This prevents selling at a loss.
     """
     market_by_ticker = {m.ticker: m for m in open_markets}
     signals: list[OilSellSignal] = []
@@ -182,7 +183,13 @@ def generate_oil_sell_signals(
         market = market_by_ticker.get(position.ticker)
         bid = market.yes_bid if market else 0.0
 
-        if bid > config.COMMODITY_SELL_MIN_PRICE:
+        # Compute cost basis per contract to avoid selling at a loss
+        cost_per_contract = 0.0
+        if position.market_exposure > 0 and position.market_exposure_dollars > 0:
+            cost_per_contract = position.market_exposure_dollars / position.market_exposure
+
+        # Only sell if bid exceeds BOTH the min price floor AND our cost basis
+        if bid > config.COMMODITY_SELL_MIN_PRICE and bid > cost_per_contract:
             signal = OilSellSignal(
                 position=position,
                 market=market,
@@ -190,6 +197,11 @@ def generate_oil_sell_signals(
                 reason="take_profit",
             )
             signals.append(signal)
-            logger.info("OIL SELL SIGNAL: %s", signal)
+            logger.info("OIL SELL SIGNAL: %s (cost basis $%.2f/contract)", signal, cost_per_contract)
+        elif bid > config.COMMODITY_SELL_MIN_PRICE:
+            logger.debug(
+                "OIL sell skipped %s: bid $%.2f <= cost basis $%.2f",
+                position.ticker, bid, cost_per_contract,
+            )
 
     return signals

@@ -179,7 +179,8 @@ def generate_gas_sell_signals(
 ) -> list[GasSellSignal]:
     """
     Check gas positions for exit opportunities.
-    Returns sell signals when bid > COMMODITY_SELL_MIN_PRICE.
+    Only sells when bid > COMMODITY_SELL_MIN_PRICE AND bid > cost basis per contract.
+    This prevents selling at a loss (buy at 60¢, sell at 59¢ bug).
     """
     market_by_ticker = {m.ticker: m for m in open_markets}
     signals: list[GasSellSignal] = []
@@ -196,7 +197,13 @@ def generate_gas_sell_signals(
         market = market_by_ticker.get(position.ticker)
         bid = market.yes_bid if market else 0.0
 
-        if bid > config.COMMODITY_SELL_MIN_PRICE:
+        # Compute cost basis per contract to avoid selling at a loss
+        cost_per_contract = 0.0
+        if position.market_exposure > 0 and position.market_exposure_dollars > 0:
+            cost_per_contract = position.market_exposure_dollars / position.market_exposure
+
+        # Only sell if bid exceeds BOTH the min price floor AND our cost basis
+        if bid > config.COMMODITY_SELL_MIN_PRICE and bid > cost_per_contract:
             signal = GasSellSignal(
                 position=position,
                 market=market,
@@ -204,6 +211,11 @@ def generate_gas_sell_signals(
                 reason="take_profit",
             )
             signals.append(signal)
-            logger.info("GAS SELL SIGNAL: %s", signal)
+            logger.info("GAS SELL SIGNAL: %s (cost basis $%.2f/contract)", signal, cost_per_contract)
+        elif bid > config.COMMODITY_SELL_MIN_PRICE:
+            logger.debug(
+                "GAS sell skipped %s: bid $%.2f <= cost basis $%.2f",
+                position.ticker, bid, cost_per_contract,
+            )
 
     return signals
