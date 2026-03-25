@@ -5,10 +5,10 @@ Fetches and parses Kalshi WTI crude oil markets (KXWTI daily, KXWTIW weekly).
 
 Market structure:
   - KXWTI: Daily WTI crude oil prices
-    Ticker format: KXWTI-26MAR25-98.50  (above $98.50)
+    Ticker format: KXWTI-26MAR25-T98.50  (above $98.50)
 
   - KXWTIW: Weekly WTI crude oil prices
-    Ticker format: KXWTIW-26MAR28-95.00  (above $95.00)
+    Ticker format: KXWTIW-26MAR28-T95.00  (above $95.00)
 
 All markets are directional: "Will WTI crude be ABOVE $XX.XX?"
 """
@@ -82,9 +82,12 @@ def _parse_oil_ticker(ticker: str) -> dict:
     except (ValueError, IndexError):
         pass
 
-    # Parse strike price from third part (e.g. "98.50")
+    # Parse strike price from third part (e.g. "T98.50" or "98.50")
     try:
         price_str = "-".join(parts[2:])
+        # Oil tickers use T prefix for strike (e.g. "T88.99")
+        if price_str.upper().startswith("T"):
+            price_str = price_str[1:]
         result["strike_price"] = float(price_str)
     except (ValueError, IndexError):
         pass
@@ -114,11 +117,9 @@ def get_oil_markets() -> list[OilMarket]:
             ticker = m.get("ticker", "")
             event_ticker = m.get("event_ticker", "")
 
-            # Parse prices
-            yes_ask = float(m.get("yes_ask", "0") or "0")
-            yes_bid = float(m.get("yes_bid", "0") or "0")
-            if yes_ask == 0:
-                yes_ask = float(m.get("yes_ask_cost", "0") or "0")
+            # Parse prices — API returns yes_ask_dollars/yes_bid_dollars (strings)
+            yes_ask = float(m.get("yes_ask_dollars") or m.get("yes_ask") or "0")
+            yes_bid = float(m.get("yes_bid_dollars") or m.get("yes_bid") or "0")
 
             # Parse ticker details
             parsed = _parse_oil_ticker(ticker)

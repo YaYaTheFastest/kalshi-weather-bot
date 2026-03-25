@@ -56,6 +56,7 @@ from gas_scanner import fetch_gas_forecast
 from oil_engine import generate_oil_buy_signals, generate_oil_sell_signals
 from oil_markets import get_oil_markets
 from oil_scanner import fetch_oil_forecast
+from spread_engine import find_spread_signals, generate_spread_confirmed_signals
 from kalshi_client import (
     get_balance,
     get_positions,
@@ -255,7 +256,20 @@ def run_scan_cycle(cycle_number: int) -> dict:
                 gas_buys = generate_gas_buy_signals(
                     gas_forecast, open_gas_markets, held_tickers
                 )
+
+                # Spread analysis — log incoherencies and boost confirmed signals
+                gas_spreads = find_spread_signals(open_gas_markets, gas_forecast)
+                if gas_spreads:
+                    logger.info("Gas spread signals: %d incoherencies detected", len(gas_spreads))
+                    for ss in gas_spreads[:3]:
+                        logger.info("  %s", ss)
+                gas_confirms = generate_spread_confirmed_signals(open_gas_markets, gas_forecast)
                 for sig in gas_buys:
+                    confirm = gas_confirms.get(sig.market.ticker)
+                    if confirm:
+                        sig.edge += confirm.boost
+                        logger.info("Gas signal boosted: %s +%.2f edge (%s)",
+                                    sig.market.ticker, confirm.boost, confirm.reason)
                     all_buy_signals.append((sig, "gas"))
             else:
                 logger.warning("Failed to fetch gas price data")
@@ -294,7 +308,20 @@ def run_scan_cycle(cycle_number: int) -> dict:
                 oil_buys = generate_oil_buy_signals(
                     oil_forecast, open_oil_markets, held_tickers
                 )
+
+                # Spread analysis — log incoherencies and boost confirmed signals
+                oil_spreads = find_spread_signals(open_oil_markets, oil_forecast)
+                if oil_spreads:
+                    logger.info("Oil spread signals: %d incoherencies detected", len(oil_spreads))
+                    for ss in oil_spreads[:3]:
+                        logger.info("  %s", ss)
+                oil_confirms = generate_spread_confirmed_signals(open_oil_markets, oil_forecast)
                 for sig in oil_buys:
+                    confirm = oil_confirms.get(sig.market.ticker)
+                    if confirm:
+                        sig.edge += confirm.boost
+                        logger.info("Oil signal boosted: %s +%.2f edge (%s)",
+                                    sig.market.ticker, confirm.boost, confirm.reason)
                     all_buy_signals.append((sig, "oil"))
             else:
                 logger.warning("Failed to fetch oil price data")

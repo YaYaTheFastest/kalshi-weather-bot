@@ -278,11 +278,9 @@ def get_temperature_markets(target_date: Optional[date] = None) -> list[KalshiMa
             ticker = m.get("ticker", "")
             event_ticker = m.get("event_ticker", "")
 
-            # Parse prices (API returns strings like "0.5600")
-            yes_ask = float(m.get("yes_ask", "0") or "0")
-            yes_bid = float(m.get("yes_bid", "0") or "0")
-            if yes_ask == 0:
-                yes_ask = float(m.get("yes_ask_cost", "0") or "0")
+            # Parse prices — API returns yes_ask_dollars/yes_bid_dollars (strings)
+            yes_ask = float(m.get("yes_ask_dollars") or m.get("yes_ask") or "0")
+            yes_bid = float(m.get("yes_bid_dollars") or m.get("yes_bid") or "0")
 
             city_key = _identify_city_from_ticker(ticker)
             bucket_low, bucket_high = _parse_bucket_from_ticker(ticker, "")
