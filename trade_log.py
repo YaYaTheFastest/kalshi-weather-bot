@@ -84,7 +84,7 @@ def update_log():
         action = f.get("action", "")  # buy or sell
         side = f.get("side", "")  # yes or no
         # API v2 returns count_fp and prices in dollars (as strings)
-        count = int(f.get("count_fp", 0) or f.get("count", 0) or 0)
+        count = int(float(f.get("count_fp", 0) or f.get("count", 0) or 0))
         # Prices are already in dollars (strings like "0.14")
         yes_price_str = f.get("yes_price_dollars") or f.get("yes_price", 0)
         no_price_str = f.get("no_price_dollars") or f.get("no_price", 0)
