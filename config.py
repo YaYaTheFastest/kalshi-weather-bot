@@ -128,6 +128,11 @@ COMMODITY_DRIFT_DAMPENING: float = float(
 )  # Mean reversion dampening
 
 # ---------------------------------------------------------------------------
+# EIA API (for gas price cross-referencing)
+# ---------------------------------------------------------------------------
+EIA_API_KEY: str = os.getenv("EIA_API_KEY", "xZLioPQmYYDd92cVykFT1q1P2kqKEl71t8huGsCa")
+
+# ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")

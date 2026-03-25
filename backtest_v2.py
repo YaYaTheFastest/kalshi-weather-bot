@@ -39,7 +39,7 @@ def fetch_eia_weekly():
     """Fetch weekly gas prices from EIA API v2 (DEMO_KEY, no registration)."""
     url = "https://api.eia.gov/v2/petroleum/pri/gnd/data/"
     params = {
-        "api_key": "DEMO_KEY",
+        "api_key": config.EIA_API_KEY,
         "frequency": "weekly",
         "data[0]": "value",
         "facets[series][]": "EMM_EPMR_PTE_NUS_DPG",
