@@ -123,6 +123,8 @@ except (AttributeError, OSError):
 # Local position tracker (prevents duplicate buys when API doesn't return positions)
 # ---------------------------------------------------------------------------
 _locally_held_tickers: set[str] = set()
+_daily_spend: float = 0.0  # Total dollars spent on buys today
+_daily_spend_date: str = ""  # Reset when date changes
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +216,29 @@ def run_scan_cycle(cycle_number: int) -> dict:
 
     balance = get_balance()
     logger.info("Portfolio balance: $%.2f", balance)
+
+    # Hard balance floor: never trade if balance < $5
+    if balance < 5.0:
+        logger.warning("Balance too low ($%.2f). Skipping all trading.", balance)
+        return stats
+
+    # Hard daily spend cap: track locally since risk_manager may not see API positions
+    global _daily_spend, _daily_spend_date
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if _daily_spend_date != today_str:
+        _daily_spend = 0.0
+        _daily_spend_date = today_str
+        _locally_held_tickers.clear()  # Reset local tracker at start of new day
+        logger.info("New trading day — reset daily spend and local position tracker")
+
+    if _daily_spend >= config.MAX_DAILY_LOSS_USD:
+        logger.warning(
+            "Daily spend cap reached ($%.2f >= $%.2f). No more buys today.",
+            _daily_spend, config.MAX_DAILY_LOSS_USD,
+        )
+        return stats
+
+    logger.info("Daily spend: $%.2f / $%.2f limit", _daily_spend, config.MAX_DAILY_LOSS_USD)
 
     # Collect all buy signals from both market types, then rank them together
     all_buy_signals = []  # list of (signal, market_type) tuples
@@ -397,10 +422,21 @@ def run_scan_cycle(cycle_number: int) -> dict:
 
         ask_cents = max(1, min(99, int(ask_price * 100)))
 
-        # Size the position
-        num_contracts, cost_usd = risk_manager.compute_position_size(ask_price, balance)
-        if num_contracts == 0:
-            logger.warning("Position size computed as 0 for %s — skipping", ticker)
+        # Check daily spend cap before sizing
+        remaining_budget = config.MAX_DAILY_LOSS_USD - _daily_spend
+        if remaining_budget < 0.50:
+            logger.info("Daily spend cap nearly reached ($%.2f spent). Stopping buys.", _daily_spend)
+            break
+
+        # Size the position (capped by remaining daily budget)
+        effective_max = min(config.MAX_POSITION_USD, remaining_budget, balance)
+        num_contracts = max(1, int(effective_max / ask_price)) if ask_price > 0 else 0
+        cost_usd = num_contracts * ask_price
+        if cost_usd > effective_max:
+            num_contracts = max(1, int(effective_max / ask_price))
+            cost_usd = num_contracts * ask_price
+        if num_contracts == 0 or cost_usd > effective_max:
+            logger.warning("Position size 0 or exceeds budget for %s — skipping", ticker)
             continue
 
         # Pre-trade risk check
@@ -434,6 +470,7 @@ def run_scan_cycle(cycle_number: int) -> dict:
             risk_manager.record_buy(ticker, cost_usd)
             held_tickers.add(ticker)
             _locally_held_tickers.add(ticker)
+            _daily_spend += cost_usd
             balance -= cost_usd
             stats["buys_executed"] += 1
             logger.info(
