@@ -128,6 +128,14 @@ COMMODITY_DRIFT_DAMPENING: float = float(
 )  # Mean reversion dampening
 
 # ---------------------------------------------------------------------------
+# Spread trading parameters
+# ---------------------------------------------------------------------------
+ENABLE_SPREAD_TRADING: bool = os.getenv("ENABLE_SPREAD_TRADING", "true").lower() in ("true", "1", "yes")
+SPREAD_MAX_TRADES_PER_CYCLE: int = int(os.getenv("SPREAD_MAX_TRADES_PER_CYCLE", "2"))
+SPREAD_MIN_PROFIT_CENTS: float = float(os.getenv("SPREAD_MIN_PROFIT_CENTS", "0.05"))  # $0.05 min expected profit per contract
+SPREAD_MAX_POSITION_USD: float = float(os.getenv("SPREAD_MAX_POSITION_USD", "2.00"))
+
+# ---------------------------------------------------------------------------
 # EIA API (for gas price cross-referencing)
 # ---------------------------------------------------------------------------
 EIA_API_KEY: str = os.getenv("EIA_API_KEY", "xZLioPQmYYDd92cVykFT1q1P2kqKEl71t8huGsCa")

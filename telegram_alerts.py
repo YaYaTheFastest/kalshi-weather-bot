@@ -299,6 +299,54 @@ def alert_oil_sell_executed(signal, result: OrderResult, proceeds_usd: float) ->
 
 
 # ---------------------------------------------------------------------------
+# Spread trade alerts
+# ---------------------------------------------------------------------------
+
+def alert_spread_executed(trade, buy_result: OrderResult, sell_result: Optional[OrderResult]) -> None:
+    """Send a Telegram alert when a spread trade fires."""
+    buy_ok = buy_result.success
+    sell_ok = sell_result.success if sell_result else None
+
+    if buy_ok and sell_ok:
+        status = "\u2705 Both Legs Filled"
+    elif buy_ok and sell_ok is False:
+        status = "\u26a0\ufe0f Buy Filled / Sell Failed"
+    elif buy_ok and sell_ok is None:
+        status = "\u2705 Buy Filled (single-leg)"
+    else:
+        status = "\u274c Failed"
+
+    buy_leg = trade.buy_leg
+    sell_leg = trade.sell_leg
+
+    sell_line = ""
+    if sell_leg:
+        sell_line = f"Sell: <code>{sell_leg.ticker}</code> x {sell_leg.count} @ {sell_leg.price_cents}c\n"
+    else:
+        sell_line = "Sell: (none — single-leg)\n"
+
+    text = (
+        f"{_dry_tag()}\U0001f504 <b>SPREAD TRADE {status}</b>\n"
+        f"Type: {trade.trade_type}\n"
+        f"Buy: <code>{buy_leg.ticker}</code> x {buy_leg.count} @ {buy_leg.price_cents}c\n"
+        f"{sell_line}"
+        f"Expected profit: ${trade.expected_profit:.2f}\n"
+        f"Max loss: ${trade.max_loss:.2f}\n"
+        f"Buy order: {buy_result.order_id or 'n/a'}\n"
+    )
+    if sell_result:
+        text += f"Sell order: {sell_result.order_id or 'n/a'}\n"
+    text += f"Time: {_now_str()}"
+
+    if not buy_ok:
+        text += f"\nBuy error: {buy_result.error}"
+    if sell_result and not sell_ok:
+        text += f"\nSell error: {sell_result.error}"
+
+    _send(text)
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 

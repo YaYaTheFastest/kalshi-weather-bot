@@ -57,6 +57,7 @@ from oil_engine import generate_oil_buy_signals, generate_oil_sell_signals
 from oil_markets import get_oil_markets
 from oil_scanner import fetch_oil_forecast
 from spread_engine import find_spread_signals, generate_spread_confirmed_signals
+from spread_executor import generate_spread_trades, execute_spread_trade
 from kalshi_client import (
     get_balance,
     get_positions,
@@ -73,6 +74,7 @@ from risk_manager import RiskLimitExceeded, risk_manager
 ENABLE_WEATHER: bool = os.getenv("ENABLE_WEATHER", "false").lower() in ("true", "1", "yes")
 ENABLE_GAS: bool = os.getenv("ENABLE_GAS", "true").lower() in ("true", "1", "yes")
 ENABLE_OIL: bool = os.getenv("ENABLE_OIL", "true").lower() in ("true", "1", "yes")
+ENABLE_SPREAD_TRADING: bool = config.ENABLE_SPREAD_TRADING
 
 # ---------------------------------------------------------------------------
 # Logging setup
@@ -244,6 +246,8 @@ def run_scan_cycle(cycle_number: int) -> dict:
     # Collect all buy signals from both market types, then rank them together
     all_buy_signals = []  # list of (signal, market_type) tuples
     all_sell_signals = []  # list of (signal, market_type) tuples
+    gas_spreads = []  # spread signals for spread executor
+    oil_spreads = []
 
     # ====================================================================
     # WEATHER MARKETS (every 3rd cycle — NOAA is slower-moving, fewer API calls)
@@ -491,6 +495,50 @@ def run_scan_cycle(cycle_number: int) -> dict:
                 logger.warning("Insufficient balance — stopping all buys for this cycle")
                 break
 
+    # ====================================================================
+    # EXECUTE SPREAD TRADES (market-neutral arbitrage)
+    # ====================================================================
+    if ENABLE_SPREAD_TRADING:
+        all_spread_signals = []
+        if ENABLE_GAS and gas_spreads:
+            all_spread_signals.extend(gas_spreads)
+        if ENABLE_OIL and oil_spreads:
+            all_spread_signals.extend(oil_spreads)
+
+        if all_spread_signals:
+            logger.info("=== Spread trading: %d signals to evaluate ===", len(all_spread_signals))
+            spread_trades = generate_spread_trades(all_spread_signals, held_tickers, balance)
+
+            if spread_trades:
+                logger.info("Generated %d actionable spread trades", len(spread_trades))
+
+            spread_count = 0
+            for trade in spread_trades[:config.SPREAD_MAX_TRADES_PER_CYCLE]:
+                success, cost = execute_spread_trade(
+                    trade=trade,
+                    held_tickers=held_tickers,
+                    balance=balance,
+                    daily_spend=_daily_spend,
+                )
+                if success:
+                    spread_count += 1
+                    _daily_spend += cost
+                    balance -= cost
+                    _locally_held_tickers.add(trade.buy_leg.ticker)
+                    logger.info(
+                        "SPREAD executed: %s | buy %s | sell %s | profit $%.2f",
+                        trade.trade_type,
+                        trade.buy_leg.ticker,
+                        trade.sell_leg.ticker if trade.sell_leg else "(none)",
+                        trade.expected_profit,
+                    )
+
+            if spread_count:
+                stats["buys_executed"] += spread_count
+                logger.info("Spread trades executed this cycle: %d", spread_count)
+        else:
+            logger.debug("No spread signals to evaluate this cycle")
+
     logger.info("Cycle %d complete: %s", cycle_number, risk_manager.status_summary())
     return stats
 
@@ -505,7 +553,8 @@ def main() -> None:
     logger.info("=" * 60)
     logger.info("Kalshi Trading Bot starting up")
     logger.info("Mode: %s", "DRY RUN" if config.DRY_RUN else "LIVE TRADING")
-    logger.info("Markets: Weather=%s | Gas=%s | Oil=%s", ENABLE_WEATHER, ENABLE_GAS, ENABLE_OIL)
+    logger.info("Markets: Weather=%s | Gas=%s | Oil=%s | Spreads=%s",
+                ENABLE_WEATHER, ENABLE_GAS, ENABLE_OIL, ENABLE_SPREAD_TRADING)
     logger.info("Scan interval: %ds", config.SCAN_INTERVAL_SECONDS)
     logger.info("PID: %d", os.getpid())
     logger.info("=" * 60)
