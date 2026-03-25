@@ -120,6 +120,12 @@ except (AttributeError, OSError):
 
 
 # ---------------------------------------------------------------------------
+# Local position tracker (prevents duplicate buys when API doesn't return positions)
+# ---------------------------------------------------------------------------
+_locally_held_tickers: set[str] = set()
+
+
+# ---------------------------------------------------------------------------
 # Weather scan (extracted to its own function to isolate variable scope)
 # ---------------------------------------------------------------------------
 
@@ -191,7 +197,11 @@ def run_scan_cycle(cycle_number: int) -> dict:
     logger.info("=== Cycle %d: Syncing positions ===", cycle_number)
     live_positions = get_positions()
     risk_manager.sync_positions(live_positions)
-    held_tickers = {p.ticker for p in live_positions if p.market_exposure > 0}
+    api_held = {p.ticker for p in live_positions if p.market_exposure > 0}
+    # Merge API positions with locally tracked ones (belt and suspenders)
+    held_tickers = api_held | _locally_held_tickers
+    logger.info("Held tickers: %d from API, %d local, %d merged",
+                len(api_held), len(_locally_held_tickers), len(held_tickers))
 
     # Check kill switch before any trading
     if risk_manager.daily_pnl <= -config.MAX_DAILY_LOSS_USD:
@@ -423,6 +433,7 @@ def run_scan_cycle(cycle_number: int) -> dict:
         if result.success:
             risk_manager.record_buy(ticker, cost_usd)
             held_tickers.add(ticker)
+            _locally_held_tickers.add(ticker)
             balance -= cost_usd
             stats["buys_executed"] += 1
             logger.info(
