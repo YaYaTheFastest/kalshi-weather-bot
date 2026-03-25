@@ -36,44 +36,43 @@ class EIAPrice:
     price: float
 
 def fetch_eia_weekly():
-    url = "https://www.eia.gov/dnav/pet/hist/LeafHandler.ashx?n=PET&s=EMM_EPMR_PTE_NUS_DPG&f=W"
+    """Fetch weekly gas prices from EIA API v2 (DEMO_KEY, no registration)."""
+    url = "https://api.eia.gov/v2/petroleum/pri/gnd/data/"
+    params = {
+        "api_key": "DEMO_KEY",
+        "frequency": "weekly",
+        "data[0]": "value",
+        "facets[series][]": "EMM_EPMR_PTE_NUS_DPG",
+        "sort[0][column]": "period",
+        "sort[0][direction]": "desc",
+        "length": 200,
+    }
     try:
-        r = requests.get(url, timeout=30)
+        r = requests.get(url, params=params, timeout=30)
         r.raise_for_status()
+        data = r.json()
+        records = data.get("response", {}).get("data", [])
     except Exception as e:
-        log.error("EIA fetch failed: %s", e)
+        log.error("EIA API fetch failed: %s", e)
         return []
-    import re
+    
     prices = []
-    for match in re.finditer(r'(\d{2}/\d{2})\|(\d+\.\d+)', r.text.replace('\n', '|')):
+    for rec in records:
         try:
-            ds, ps = match.group(1), match.group(2)
-            year = 2026  # approximate
-            m, d = int(ds.split('/')[0]), int(ds.split('/')[1])
-            dt = date(year, m, d)
-            if dt > date.today():
-                dt = date(year - 1, m, d)
-            prices.append(EIAPrice(dt, float(ps)))
-        except:
+            period = rec.get("period", "")
+            value = rec.get("value")
+            if not period or value is None:
+                continue
+            dt = datetime.strptime(period, "%Y-%m-%d").date()
+            prices.append(EIAPrice(dt, float(value)))
+        except (ValueError, TypeError):
             continue
-    # Also try explicit parsing
-    import re as re2
-    rows = re2.findall(r'(\d{4}-\w+)\|[^|]*\|(\d+\.\d+)', r.text.replace('\n', '|'))
-    if not prices:
-        # Fallback: parse the HTML table more carefully
-        text = r.text
-        # Find all date-value pairs
-        for line in text.split('\n'):
-            parts = line.strip().split()
-            for i, p in enumerate(parts):
-                try:
-                    val = float(p)
-                    if 1.5 < val < 7.0:  # gas price range
-                        prices.append(EIAPrice(date.today() - timedelta(days=len(prices)*7), val))
-                except:
-                    continue
+    
     prices.sort(key=lambda p: p.week_date)
-    log.info("EIA: %d weekly prices loaded", len(prices))
+    log.info("EIA: %d weekly prices loaded (%s to %s)",
+             len(prices),
+             prices[0].week_date if prices else "?",
+             prices[-1].week_date if prices else "?")
     return prices
 
 def find_eia_price(prices, target, days_before=0):
