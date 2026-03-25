@@ -98,6 +98,8 @@ CITY_TIMEZONES = {
 
 def _fetch_open_meteo(city_key: str, lat: float, lon: float) -> Optional[CityForecast]:
     """Fetch hourly forecast from Open-Meteo for a city."""
+    import time as _time
+    _time.sleep(0.5)  # Rate limit: max 2 requests/second to avoid 429s
     tz = CITY_TIMEZONES.get(city_key, "America/New_York")
     params = {
         "latitude": lat,
@@ -237,6 +239,8 @@ def _fetch_noaa(city_key: str, lat: float, lon: float) -> Optional[CityForecast]
 
 def _fetch_open_meteo_day(city_key: str, lat: float, lon: float, target_date: str) -> Optional[CityForecast]:
     """Fetch forecast for a specific date (today or tomorrow)."""
+    import time as _time
+    _time.sleep(0.5)  # Rate limit: max 2 requests/second to avoid 429s
     tz = CITY_TIMEZONES.get(city_key, "America/New_York")
     params = {
         "latitude": lat,

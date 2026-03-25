@@ -480,6 +480,10 @@ def run_scan_cycle(cycle_number: int) -> dict:
         else:
             logger.error("BUY failed for %s: %s", ticker, result.error)
             stats["errors"] += 1
+            # Stop trying if balance is insufficient — don't spam failed orders
+            if result.error and "insufficient_balance" in str(result.error):
+                logger.warning("Insufficient balance — stopping all buys for this cycle")
+                break
 
     logger.info("Cycle %d complete: %s", cycle_number, risk_manager.status_summary())
     return stats

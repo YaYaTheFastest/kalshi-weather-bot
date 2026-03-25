@@ -78,7 +78,7 @@ MAX_DAILY_LOSS_USD: float = float(
 )  # Kill switch
 
 # Scan interval
-SCAN_INTERVAL_SECONDS: int = int(os.getenv("SCAN_INTERVAL_SECONDS", "120"))  # 2 min
+SCAN_INTERVAL_SECONDS: int = int(os.getenv("SCAN_INTERVAL_SECONDS", "300"))  # 5 min (avoids Open-Meteo rate limits)
 
 # ---------------------------------------------------------------------------
 # Target cities

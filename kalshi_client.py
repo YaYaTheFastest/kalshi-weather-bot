@@ -152,11 +152,13 @@ def _post(path: str, body: dict) -> Optional[dict]:
         resp.raise_for_status()
         return resp.json()
     except requests.HTTPError as exc:
-        logger.error("Kalshi POST %s HTTP error %s: %s", path, exc.response.status_code, exc.response.text)
-        return None
+        error_text = exc.response.text if exc.response else str(exc)
+        logger.error("Kalshi POST %s HTTP error %s: %s", path, exc.response.status_code, error_text)
+        # Return error dict so callers can inspect the reason
+        return {"_error": error_text, "_status": exc.response.status_code}
     except Exception as exc:
         logger.error("Kalshi POST %s error: %s", path, exc)
-        return None
+        return {"_error": str(exc)}
 
 
 def _delete(path: str) -> bool:
@@ -328,12 +330,11 @@ def get_balance() -> float:
     data = _get("/portfolio/balance")
     if not data:
         return 0.0
-    # API may return balance in cents or dollars depending on endpoint version
+    # Kalshi API returns balance in cents as an integer
     balance = data.get("balance", 0)
-    # If > 1000 it's likely in cents
-    if isinstance(balance, (int, float)) and balance > 1000:
-        return balance / 100.0
-    return float(balance)
+    logger.info("Raw balance from API: %s (type: %s)", balance, type(balance).__name__)
+    # Always convert from cents to dollars
+    return float(balance) / 100.0
 
 
 def get_positions() -> list[KalshiPosition]:
@@ -410,7 +411,8 @@ def place_buy_order(
             filled_price=float(order.get("yes_price", yes_price_cents)) / 100.0,
             filled_count=int(order.get("count", count)),
         )
-    return OrderResult(success=False, error=str(result))
+    error_msg = result.get("_error", str(result)) if isinstance(result, dict) else str(result)
+    return OrderResult(success=False, error=error_msg)
 
 
 def place_sell_order(
@@ -455,7 +457,8 @@ def place_sell_order(
             filled_price=float(order.get("yes_price", yes_price_cents)) / 100.0,
             filled_count=int(order.get("count", count)),
         )
-    return OrderResult(success=False, error=str(result))
+    error_msg = result.get("_error", str(result)) if isinstance(result, dict) else str(result)
+    return OrderResult(success=False, error=error_msg)
 
 
 def cancel_order(order_id: str) -> bool:
