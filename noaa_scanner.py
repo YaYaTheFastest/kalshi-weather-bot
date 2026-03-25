@@ -54,10 +54,10 @@ class CityForecast:
     def _gaussian_confidence(self, low: float, high: float) -> float:
         """
         Estimate P(daily_high in [low, high]) using a Gaussian centered on
-        the forecasted high with sigma = max(temp_std, 2.0).
-        Floor sigma at 2.0°F to avoid overconfidence on calm days.
+        the forecasted high with sigma = max(temp_std, 3.5).
+        Floor sigma at 3.5°F to account for spring weather volatility.
         """
-        sigma = max(self.temp_std, 2.0)
+        sigma = max(self.temp_std, 3.5)
         mu = self.forecasted_high
 
         def _phi(x: float) -> float:

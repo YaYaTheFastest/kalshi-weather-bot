@@ -125,6 +125,7 @@ except (AttributeError, OSError):
 _locally_held_tickers: set[str] = set()
 _daily_spend: float = 0.0  # Total dollars spent on buys today
 _daily_spend_date: str = ""  # Reset when date changes
+_cycle_count: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -245,9 +246,12 @@ def run_scan_cycle(cycle_number: int) -> dict:
     all_sell_signals = []  # list of (signal, market_type) tuples
 
     # ====================================================================
-    # WEATHER MARKETS
+    # WEATHER MARKETS (every 3rd cycle — NOAA is slower-moving, fewer API calls)
     # ====================================================================
-    if ENABLE_WEATHER:
+    global _cycle_count
+    _cycle_count += 1
+
+    if ENABLE_WEATHER and _cycle_count % 3 == 1:
         logger.info("=== Cycle %d: Weather scan ===", cycle_number)
         weather_signals = _run_weather_scan(cycle_number, live_positions, held_tickers, stats)
         for sig, sig_type in weather_signals:
@@ -255,6 +259,8 @@ def run_scan_cycle(cycle_number: int) -> dict:
                 all_buy_signals.append((sig, "weather"))
             else:
                 all_sell_signals.append((sig, "weather"))
+    elif ENABLE_WEATHER:
+        logger.info("=== Cycle %d: Weather scan skipped (runs every 3rd cycle) ===", cycle_number)
 
     # ====================================================================
     # GAS PRICE MARKETS
