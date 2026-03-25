@@ -128,6 +128,7 @@ _locally_held_tickers: set[str] = set()
 _daily_spend: float = 0.0  # Total dollars spent on buys today
 _daily_spend_date: str = ""  # Reset when date changes
 _cycle_count: int = 0
+_failed_sell_tickers: set[str] = set()  # Tickers where sell failed (e.g. cancelled) — skip until next day
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +233,7 @@ def run_scan_cycle(cycle_number: int) -> dict:
         _daily_spend = 0.0
         _daily_spend_date = today_str
         _locally_held_tickers.clear()  # Reset local tracker at start of new day
+        _failed_sell_tickers.clear()  # Reset failed sell cooldowns
         logger.info("New trading day — reset daily spend and local position tracker")
 
     if _daily_spend >= config.MAX_DAILY_LOSS_USD:
@@ -381,6 +383,13 @@ def run_scan_cycle(cycle_number: int) -> dict:
 
     for sell_signal, market_type in all_sell_signals:
         ticker = sell_signal.position.ticker
+
+        # Skip tickers where a previous sell was cancelled (e.g. insufficient funds)
+        # to avoid spamming Kalshi with repeated failing orders
+        if ticker in _failed_sell_tickers:
+            logger.debug("Sell skipped %s: previously failed, on cooldown", ticker)
+            continue
+
         num_contracts = abs(sell_signal.position.market_exposure)
         bid_cents = max(1, min(99, int(sell_signal.bid_price * 100)))
         proceeds = num_contracts * sell_signal.bid_price
@@ -413,6 +422,7 @@ def run_scan_cycle(cycle_number: int) -> dict:
             logger.info("SELL executed: %s × %d @ %d¢", ticker, num_contracts, bid_cents)
         else:
             logger.error("SELL failed for %s: %s", ticker, result.error)
+            _failed_sell_tickers.add(ticker)
             stats["errors"] += 1
 
     # ====================================================================

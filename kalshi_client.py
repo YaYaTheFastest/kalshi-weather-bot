@@ -423,6 +423,10 @@ def place_buy_order(
     result = _post("/portfolio/orders", body)
     if result and result.get("order"):
         order = result["order"]
+        status = order.get("status", "")
+        if status in ("canceled", "cancelled"):
+            logger.warning("Buy order for %s was immediately cancelled: %s", ticker, order)
+            return OrderResult(success=False, error=f"Order cancelled: {status}")
         return OrderResult(
             success=True,
             order_id=order.get("order_id"),
@@ -469,6 +473,12 @@ def place_sell_order(
     result = _post("/portfolio/orders", body)
     if result and result.get("order"):
         order = result["order"]
+        status = order.get("status", "")
+        # Only report success if the order is actually active or filled — not if
+        # Kalshi immediately cancelled it (e.g. insufficient funds).
+        if status in ("canceled", "cancelled"):
+            logger.warning("Sell order for %s was immediately cancelled: %s", ticker, order)
+            return OrderResult(success=False, error=f"Order cancelled: {status}")
         return OrderResult(
             success=True,
             order_id=order.get("order_id"),
