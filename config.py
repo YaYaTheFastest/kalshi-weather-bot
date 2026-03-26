@@ -136,6 +136,12 @@ SPREAD_MIN_PROFIT_CENTS: float = float(os.getenv("SPREAD_MIN_PROFIT_CENTS", "0.0
 SPREAD_MAX_POSITION_USD: float = float(os.getenv("SPREAD_MAX_POSITION_USD", "2.00"))
 
 # ---------------------------------------------------------------------------
+# Metals feature flags
+# ---------------------------------------------------------------------------
+ENABLE_GOLD: bool = os.getenv("ENABLE_GOLD", "true").lower() in ("true", "1", "yes")
+ENABLE_SILVER: bool = os.getenv("ENABLE_SILVER", "true").lower() in ("true", "1", "yes")
+
+# ---------------------------------------------------------------------------
 # EIA API (for gas price cross-referencing)
 # ---------------------------------------------------------------------------
 EIA_API_KEY: str = os.getenv("EIA_API_KEY", "xZLioPQmYYDd92cVykFT1q1P2kqKEl71t8huGsCa")

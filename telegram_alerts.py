@@ -87,6 +87,12 @@ def alert_bot_started() -> None:
     oil_on = os.getenv("ENABLE_OIL", "true").lower() in ("true", "1", "yes")
     if oil_on:
         markets_str.append("WTI Oil (daily + weekly)")
+    gold_on = os.getenv("ENABLE_GOLD", "true").lower() in ("true", "1", "yes")
+    if gold_on:
+        markets_str.append("Gold (daily + weekly + monthly)")
+    silver_on = os.getenv("ENABLE_SILVER", "true").lower() in ("true", "1", "yes")
+    if silver_on:
+        markets_str.append("Silver (daily + weekly + monthly)")
     text = (
         f"🤖 <b>Kalshi Trading Bot Started</b>\n"
         f"Mode: <b>{mode}</b>\n"
@@ -286,6 +292,59 @@ def alert_oil_sell_executed(signal, result: OrderResult, proceeds_usd: float) ->
     status = "\u2705 Filled" if result.success else "\u274c Failed"
     text = (
         f"{_dry_tag()}\U0001f6e2\ufe0f\U0001f4c9 <b>OIL SELL ORDER {status}</b>\n"
+        f"Ticker: <code>{signal.position.ticker}</code>\n"
+        f"Reason: {signal.reason}\n"
+        f"Bid price: ${signal.bid_price:.2f}\n"
+        f"Proceeds: ${proceeds_usd:.2f}\n"
+        f"Order ID: {result.order_id or 'n/a'}\n"
+        f"Time: {_now_str()}"
+    )
+    if not result.success:
+        text += f"\nError: {result.error}"
+    _send(text)
+
+
+# ---------------------------------------------------------------------------
+# Metals (gold/silver) price alerts
+# ---------------------------------------------------------------------------
+
+def alert_metals_buy_executed(signal, result: OrderResult, num_contracts: int, cost_usd: float) -> None:
+    status = "\u2705 Filled" if result.success else "\u274c Failed"
+    metal = getattr(signal, 'metal', 'metals').upper()
+    emoji = "\U0001f947" if metal == "GOLD" else "\U0001fa99"  # 🥇 or 🪙
+    text = (
+        f"{_dry_tag()}{emoji}\U0001f4c8 <b>{metal} BUY ORDER {status}</b>\n"
+        f"Ticker: <code>{signal.market.ticker}</code>\n"
+        f"Strike: ${signal.market.strike_price:.2f}\n"
+        f"Direction: {signal.direction.upper()}\n"
+        f"Type: {signal.market.market_type}\n"
+        f"Contracts: {num_contracts}\n"
+        f"Price: ${signal.market_price:.2f} | Cost: ${cost_usd:.2f}\n"
+        f"Model confidence: {signal.model_confidence:.1%}\n"
+        f"Current spot: ${signal.current_price:.2f}\n"
+        f"Projected: ${signal.projected_price:.2f}\n"
+        f"Edge: {signal.edge:.1%}\n"
+        f"Settles in: {signal.market.days_to_settlement}d\n"
+        f"Order ID: {result.order_id or 'n/a'}\n"
+        f"Time: {_now_str()}"
+    )
+    if not result.success:
+        text += f"\nError: {result.error}"
+    _send(text)
+
+
+def alert_metals_sell_executed(signal, result: OrderResult, proceeds_usd: float) -> None:
+    status = "\u2705 Filled" if result.success else "\u274c Failed"
+    # Detect metal from ticker
+    ticker_upper = signal.position.ticker.upper()
+    if "GOLD" in ticker_upper:
+        metal = "GOLD"
+        emoji = "\U0001f947"
+    else:
+        metal = "SILVER"
+        emoji = "\U0001fa99"
+    text = (
+        f"{_dry_tag()}{emoji}\U0001f4c9 <b>{metal} SELL ORDER {status}</b>\n"
         f"Ticker: <code>{signal.position.ticker}</code>\n"
         f"Reason: {signal.reason}\n"
         f"Bid price: ${signal.bid_price:.2f}\n"
