@@ -62,6 +62,14 @@ from metals_markets import get_gold_markets, get_silver_markets
 from metals_scanner import fetch_gold_forecast, fetch_silver_forecast
 from spread_engine import find_spread_signals, generate_spread_confirmed_signals
 from spread_executor import generate_spread_trades, execute_spread_trade
+
+# Model upgrade: real-time prices and implied volatility
+try:
+    from price_feed import get_gold_spot, get_silver_spot, get_oil_spot
+    from implied_vol import compute_implied_vol, blend_volatility
+    _HAS_PRICE_FEED = True
+except ImportError:
+    _HAS_PRICE_FEED = False
 from kalshi_client import (
     get_balance,
     get_positions,
@@ -206,6 +214,25 @@ def run_scan_cycle(cycle_number: int) -> dict:
         "sells_executed": 0,
         "errors": 0,
     }
+
+    # ---- 0. Fetch real-time prices (if available) -------------------------
+    _live_prices = {}
+    if _HAS_PRICE_FEED:
+        try:
+            gold_live = get_gold_spot()
+            silver_live = get_silver_spot()
+            oil_live = get_oil_spot()
+            if gold_live:
+                _live_prices["gold"] = gold_live
+            if silver_live:
+                _live_prices["silver"] = silver_live
+            if oil_live:
+                _live_prices["oil"] = oil_live
+            if _live_prices:
+                logger.info("Live prices: %s", 
+                           " | ".join(f"{k}=${v:.2f}" for k, v in _live_prices.items()))
+        except Exception as e:
+            logger.warning("Price feed error (using scanner fallback): %s", e)
 
     # ---- 1. Sync positions (shared across all market types) ---------------
     logger.info("=== Cycle %d: Syncing positions ===", cycle_number)

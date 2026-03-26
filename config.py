@@ -116,6 +116,9 @@ COMMODITY_MIN_EDGE: float = float(
 COMMODITY_MIN_CONFIDENCE: float = float(
     os.getenv("COMMODITY_MIN_CONFIDENCE", "0.50")
 )  # 50% min confidence (backtest: all 50%+ contracts won)
+COMMODITY_MIN_ASK: float = float(
+    os.getenv("COMMODITY_MIN_ASK", "0.10")
+)  # 10¢ min ask — reject sub-10¢ longshots (favorite-longshot bias)
 COMMODITY_MAX_ASK: float = float(
     os.getenv("COMMODITY_MAX_ASK", "0.60")
 )  # 60¢ max ask (backtest optimal: captures mid-range edge)

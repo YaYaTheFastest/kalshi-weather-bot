@@ -123,6 +123,10 @@ def generate_metals_buy_signals(
         if market.yes_ask <= 0:
             continue
 
+        # Favorite-longshot bias filter: reject sub-10¢ contracts
+        if market.yes_ask < config.COMMODITY_MIN_ASK:
+            continue
+
         if market.yes_ask > config.COMMODITY_MAX_ASK:
             continue
 
@@ -130,7 +134,7 @@ def generate_metals_buy_signals(
         forecast.days_to_settlement = market.days_to_settlement
         forecast.drift_dampening = config.COMMODITY_DRIFT_DAMPENING
 
-        # Compute probability that price > strike
+        # Compute probability — use blended vol if implied_vol available
         prob_above = forecast.confidence_above(market.strike_price)
 
         # Projected settlement price (for logging)

@@ -82,6 +82,43 @@ class CommodityForecast:
         """P(settlement_price <= strike)"""
         return 1.0 - self.confidence_above(strike)
 
+    def confidence_above_blended(self, strike: float, implied_vol: float = None) -> float:
+        """Like confidence_above but blends model vol with market implied vol.
+        
+        Uses 60% model vol + 40% implied vol. This prevents overconfidence
+        when the market disagrees with our volatility estimate.
+        If implied_vol is None, falls back to pure model vol.
+        """
+        if implied_vol is None or implied_vol <= 0:
+            return self.confidence_above(strike)
+        
+        # Save original sigma and compute with blended vol
+        days = self.days_to_settlement
+        
+        # Blend: 60% model, 40% market
+        blended_vol = self.price_std * 0.6 + implied_vol * 0.4
+        
+        # Use the same projection logic as confidence_above
+        if self.week_ago_price > 0 and self.current_price > 0:
+            raw_weekly_drift = self.current_price - self.week_ago_price
+        else:
+            raw_weekly_drift = self.daily_change * 7.0
+        effective_drift = raw_weekly_drift * self.drift_dampening
+        daily_drift = effective_drift / 7.0
+        
+        if days <= 0:
+            projected = self.current_price
+            sigma = max(blended_vol, 0.001)
+        else:
+            projected = self.current_price + daily_drift * days
+            sigma = max(blended_vol, 0.001) * math.sqrt(days)
+        
+        if sigma <= 0:
+            return 1.0 if projected > strike else 0.0
+        
+        z = (strike - projected) / sigma
+        return 0.5 * (1.0 - math.erf(z / math.sqrt(2)))
+
 
 def compute_residual_volatility(
     current_price: float,

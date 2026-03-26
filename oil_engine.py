@@ -88,6 +88,10 @@ def generate_oil_buy_signals(
         if market.yes_ask <= 0:
             continue
 
+        # Favorite-longshot bias filter: reject sub-10¢ contracts
+        if market.yes_ask < config.COMMODITY_MIN_ASK:
+            continue
+
         if market.yes_ask > config.COMMODITY_MAX_ASK:
             continue
 
