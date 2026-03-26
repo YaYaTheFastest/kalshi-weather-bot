@@ -542,10 +542,15 @@ def run_scan_cycle(cycle_number: int) -> dict:
             stats["errors"] += 1
 
     # ====================================================================
-    # EXECUTE BUYS (ranked by edge across all market types)
+    # EXECUTE BUYS (ranked by edge-per-day across all market types)
     # ====================================================================
-    # Sort all buy signals by edge descending
-    all_buy_signals.sort(key=lambda x: x[0].edge, reverse=True)
+    # Sort by annualized edge: edge / days_to_settlement
+    # This prioritizes same-day settlements for faster capital turnover
+    def _edge_per_day(item):
+        sig = item[0]
+        days = getattr(sig.market, 'days_to_settlement', 1) if hasattr(sig, 'market') else 1
+        return sig.edge / max(1, days)
+    all_buy_signals.sort(key=_edge_per_day, reverse=True)
     stats["buy_signals"] = len(all_buy_signals)
 
     for buy_signal, market_type in all_buy_signals:
