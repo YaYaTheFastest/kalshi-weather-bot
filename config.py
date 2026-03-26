@@ -111,8 +111,8 @@ CITIES: dict = {
 # Commodity market entry (shared by gas, oil, etc.)
 # ---------------------------------------------------------------------------
 COMMODITY_MIN_EDGE: float = float(
-    os.getenv("COMMODITY_MIN_EDGE", "0.30")
-)  # 30¢ minimum edge (backtest optimal: 100% win rate)
+    os.getenv("COMMODITY_MIN_EDGE", "0.35")
+)  # 35¢ minimum edge (simulation optimal: 74% win rate, +$44.50)
 COMMODITY_MIN_CONFIDENCE: float = float(
     os.getenv("COMMODITY_MIN_CONFIDENCE", "0.50")
 )  # 50% min confidence (backtest: all 50%+ contracts won)
@@ -126,8 +126,8 @@ COMMODITY_SELL_MIN_PRICE: float = float(
     os.getenv("COMMODITY_SELL_MIN_PRICE", "0.50")
 )  # Take profit threshold
 COMMODITY_DRIFT_DAMPENING: float = float(
-    os.getenv("COMMODITY_DRIFT_DAMPENING", "0.60")
-)  # Mean reversion dampening
+    os.getenv("COMMODITY_DRIFT_DAMPENING", "0.50")
+)  # Mean reversion dampening (simulation optimal: 0.5 trusts momentum more)
 
 # ---------------------------------------------------------------------------
 # Spread trading parameters

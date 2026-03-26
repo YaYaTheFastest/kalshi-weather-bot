@@ -131,8 +131,10 @@ def _parse_metals_ticker(ticker: str) -> dict:
 # ---------------------------------------------------------------------------
 
 # Gold and silver series tickers
-_GOLD_SERIES = ["KXGOLDD", "KXGOLDW", "KXGOLDMON"]
-_SILVER_SERIES = ["KXSILVERD", "KXSILVERW", "KXSILVERMON"]
+# Weekly gold/silver DISABLED — simulation showed 18%/14% win rates.
+# Daily and monthly are profitable (100% and 100% win rates).
+_GOLD_SERIES = ["KXGOLDD", "KXGOLDMON"]  # KXGOLDW disabled
+_SILVER_SERIES = ["KXSILVERD", "KXSILVERMON"]  # KXSILVERW disabled
 
 
 def get_gold_markets() -> list[MetalsMarket]:
