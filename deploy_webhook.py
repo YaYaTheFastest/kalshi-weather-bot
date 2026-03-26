@@ -24,7 +24,12 @@ from urllib.parse import urlparse, parse_qs
 # Configuration
 # ---------------------------------------------------------------------------
 PORT = 9876
-SECRET_TOKEN = os.getenv("DEPLOY_WEBHOOK_TOKEN", "lUYhlQEuTMDCtP7VFQ7wlrqF9hZbsIIS4sHx464Ob90")
+SECRET_TOKEN = os.getenv("DEPLOY_WEBHOOK_TOKEN", "")
+if not SECRET_TOKEN:
+    # SECURITY: Do not hardcode tokens. Set DEPLOY_WEBHOOK_TOKEN env var.
+    # For backward compat during transition, use the legacy token.
+    # TODO: Remove this fallback after rotating the token on the server.
+    SECRET_TOKEN = "lUYhlQEuTMDCtP7VFQ7wlrqF9hZbsIIS4sHx464Ob90"
 BOT_DIR = "/root/kalshi-weather-bot"
 SERVICE_NAME = "kalshi-bot"
 LOG_FILE = "/root/kalshi-weather-bot/webhook.log"
@@ -141,8 +146,12 @@ def get_status() -> dict:
 
 class WebhookHandler(http.server.BaseHTTPRequestHandler):
     def _check_token(self, params: dict) -> bool:
+        import hmac
         token = params.get("token", [None])[0]
-        return token == SECRET_TOKEN
+        if not token:
+            return False
+        # Use constant-time comparison to prevent timing attacks
+        return hmac.compare_digest(token, SECRET_TOKEN)
 
     def _respond(self, code: int, data: dict):
         self.send_response(code)
@@ -182,15 +191,40 @@ class WebhookHandler(http.server.BaseHTTPRequestHandler):
             logger.info("Deploy result: %s", result["success"])
             self._respond(200, result)
         elif parsed.path == "/run":
-            # Run an arbitrary script in the project directory
+            # Run a WHITELISTED script in the project directory
+            # Security: only allow specific scripts, no args injection
+            ALLOWED_SCRIPTS = {
+                "verify_api.py", "debug_positions.py", "trade_log.py",
+                "accounting.py", "stop_bot.py", "start_bot.py",
+            }
             script = params.get("script", [None])[0]
             if not script or not script.endswith(".py"):
                 self._respond(400, {"error": "Provide ?script=filename.py"})
                 return
-            args = params.get("args", [""])[0]
-            cmd = f"/root/weather-bot/venv/bin/python -B {BOT_DIR}/{script} {args}"
-            logger.info("Running script: %s", cmd)
-            rc, out = _run_cmd(cmd, timeout=300)  # 5 min timeout
+            # Security: strip path separators to prevent traversal
+            script_name = os.path.basename(script)
+            if script_name not in ALLOWED_SCRIPTS:
+                self._respond(403, {"error": f"Script '{script_name}' not in whitelist. Allowed: {sorted(ALLOWED_SCRIPTS)}"})
+                return
+            # Security: use shell=False with explicit arg list — no injection
+            import shlex
+            raw_args = params.get("args", [""])[0]
+            try:
+                args_list = shlex.split(raw_args) if raw_args else []
+            except ValueError:
+                args_list = []
+            cmd_list = ["/root/weather-bot/venv/bin/python", "-B", f"{BOT_DIR}/{script_name}"] + args_list
+            logger.info("Running whitelisted script: %s", cmd_list)
+            try:
+                result = subprocess.run(
+                    cmd_list, cwd=BOT_DIR, capture_output=True, text=True, timeout=300
+                )
+                out = (result.stdout + result.stderr).strip()
+                rc = result.returncode
+            except subprocess.TimeoutExpired:
+                rc, out = -1, "Command timed out"
+            except Exception as exc:
+                rc, out = -1, str(exc)
             self._respond(200, {"rc": rc, "output": out[-5000:]})
         else:
             self._respond(404, {"error": "Not found. POST to /deploy or /run"})

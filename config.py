@@ -47,10 +47,9 @@ NOAA_USER_AGENT: str = f"(KalshiWeatherBot, {_noaa_contact})"
 # ---------------------------------------------------------------------------
 # Telegram
 # ---------------------------------------------------------------------------
-TELEGRAM_BOT_TOKEN: str = os.getenv(
-    "TELEGRAM_BOT_TOKEN", "8701485015:AAH_GUm0x7s4gZIH3tRx1ahFKCpPmfN_2xw"
-)
-TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "8718921224")
+TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+# SECURITY: Telegram token must be set via env var, not hardcoded
+TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # ---------------------------------------------------------------------------
 # Trading parameters
@@ -144,7 +143,7 @@ ENABLE_SILVER: bool = os.getenv("ENABLE_SILVER", "true").lower() in ("true", "1"
 # ---------------------------------------------------------------------------
 # EIA API (for gas price cross-referencing)
 # ---------------------------------------------------------------------------
-EIA_API_KEY: str = os.getenv("EIA_API_KEY", "xZLioPQmYYDd92cVykFT1q1P2kqKEl71t8huGsCa")
+EIA_API_KEY: str = os.getenv("EIA_API_KEY", "")
 
 # ---------------------------------------------------------------------------
 # Logging
