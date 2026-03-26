@@ -247,15 +247,34 @@ def _build_wide_gap_trade(
     """
     Build a wide-gap single-leg buy.
 
-    If ask_diff > $0.20 AND the higher strike ask < $0.40, buy YES on higher strike.
+    If ask_diff > $0.20 AND the higher strike ask is between $0.10–$0.40,
+    buy YES on higher strike. Rejects very cheap contracts (<10¢) which are
+    usually correctly priced deep out-of-the-money lottery tickets.
     No sell leg — this is a confidence-boosted directional bet.
     """
     ask_diff = signal.ask_low - signal.ask_high
     if ask_diff <= 0.20:
         return None
 
-    # Higher strike ask must be cheap enough to be worth buying
-    if signal.ask_high <= 0 or signal.ask_high >= 0.40:
+    # Higher strike ask must be in a reasonable range:
+    # - Above 10¢ (below that, it's likely a correctly priced OTM lottery ticket)
+    # - Below 40¢ (above that, it's too expensive for a spread play)
+    if signal.ask_high < 0.10 or signal.ask_high >= 0.40:
+        if signal.ask_high < 0.10:
+            logger.debug(
+                "Wide gap skip: ask $%.2f too cheap (likely correct OTM pricing) for %s",
+                signal.ask_high, signal.ticker_high,
+            )
+        return None
+
+    # The lower strike should also be reasonably priced (not at 90¢+)
+    # If the low strike is at 90¢+ and high is at 10¢, the gap is just the
+    # natural price curve, not a mispricing.
+    if signal.ask_low > 0.85:
+        logger.debug(
+            "Wide gap skip: low strike ask $%.2f too high (natural curve, not mispricing)",
+            signal.ask_low,
+        )
         return None
 
     # Check minimum edge (use ask_diff as proxy for expected profit)
