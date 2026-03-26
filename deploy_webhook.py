@@ -195,6 +195,7 @@ class WebhookHandler(http.server.BaseHTTPRequestHandler):
                 "verify_api.py", "debug_positions.py", "trade_log.py",
                 "accounting.py", "stop_bot.py", "start_bot.py",
                 "backtest_silver.py", "backtest_v2.py", "ensure_env.py",
+                "simulate_model.py",
             }
             script = params.get("script", [None])[0]
             if not script or not script.endswith(".py"):
