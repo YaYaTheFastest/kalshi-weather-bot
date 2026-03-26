@@ -45,8 +45,8 @@ KALSHI_PRIVATE_KEY_PEM=-----BEGIN RSA PRIVATE KEY-----\nYOUR_KEY_CONTENT_HERE\n-
 KALSHI_BASE_URL=https://api.elections.kalshi.com/trade-api/v2
 
 # ---- Telegram -----------------------------------------------
-TELEGRAM_BOT_TOKEN=8701485015:AAH_GUm0x7s4gZIH3tRx1ahFKCpPmfN_2xw
-TELEGRAM_CHAT_ID=8718921224
+TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN_HERE
+TELEGRAM_CHAT_ID=YOUR_CHAT_ID_HERE
 
 # ---- NOAA ---------------------------------------------------
 NOAA_USER_AGENT=KalshiWeatherBot/1.0 (your-email@example.com)
@@ -114,9 +114,9 @@ NOAA_USER_AGENT: str = os.getenv(
 # Telegram
 # ---------------------------------------------------------------------------
 TELEGRAM_BOT_TOKEN: str = os.getenv(
-    "TELEGRAM_BOT_TOKEN", "8701485015:AAH_GUm0x7s4gZIH3tRx1ahFKCpPmfN_2xw"
+    "TELEGRAM_BOT_TOKEN", ""
 )
-TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "8718921224")
+TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # ---------------------------------------------------------------------------
 # Trading parameters
@@ -1294,5 +1294,5 @@ echo "  6. Run as a background service:"
 echo "     nohup python main.py > kalshi_weather_bot.log 2>&1 &"
 echo "     echo 'PID:' \$!"
 echo ""
-echo "  Telegram alerts will be sent to chat ID: 8718921224"
+echo "  Telegram alerts will be sent to chat ID: YOUR_CHAT_ID"
 echo "============================================================"

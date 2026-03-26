@@ -26,10 +26,8 @@ from urllib.parse import urlparse, parse_qs
 PORT = 9876
 SECRET_TOKEN = os.getenv("DEPLOY_WEBHOOK_TOKEN", "")
 if not SECRET_TOKEN:
-    # SECURITY: Do not hardcode tokens. Set DEPLOY_WEBHOOK_TOKEN env var.
-    # For backward compat during transition, use the legacy token.
-    # TODO: Remove this fallback after rotating the token on the server.
-    SECRET_TOKEN = "lUYhlQEuTMDCtP7VFQ7wlrqF9hZbsIIS4sHx464Ob90"
+    logger.error("DEPLOY_WEBHOOK_TOKEN env var not set. Webhook will reject all requests.")
+    SECRET_TOKEN = "UNSET-ROTATE-ME"  # Will never match any real token
 BOT_DIR = "/root/kalshi-weather-bot"
 SERVICE_NAME = "kalshi-bot"
 LOG_FILE = "/root/kalshi-weather-bot/webhook.log"
@@ -196,7 +194,7 @@ class WebhookHandler(http.server.BaseHTTPRequestHandler):
             ALLOWED_SCRIPTS = {
                 "verify_api.py", "debug_positions.py", "trade_log.py",
                 "accounting.py", "stop_bot.py", "start_bot.py",
-                "backtest_silver.py", "backtest_v2.py",
+                "backtest_silver.py", "backtest_v2.py", "ensure_env.py",
             }
             script = params.get("script", [None])[0]
             if not script or not script.endswith(".py"):
