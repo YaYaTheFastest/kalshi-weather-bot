@@ -69,11 +69,11 @@ SELL_MIN_PRICE: float = float(
 
 # Risk limits
 MAX_POSITION_USD: float = float(
-    os.getenv("MAX_POSITION_USD", "3.00")
+    os.getenv("MAX_POSITION_USD", "5.00")
 )  # Max spend per position
-MAX_OPEN_POSITIONS: int = int(os.getenv("MAX_OPEN_POSITIONS", "50"))
+MAX_OPEN_POSITIONS: int = int(os.getenv("MAX_OPEN_POSITIONS", "70"))
 MAX_DAILY_LOSS_USD: float = float(
-    os.getenv("MAX_DAILY_LOSS_USD", "50.00")
+    os.getenv("MAX_DAILY_LOSS_USD", "100.00")
 )  # Kill switch
 
 # Scan interval
