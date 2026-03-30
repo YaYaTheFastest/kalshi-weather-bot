@@ -580,7 +580,26 @@ def run_scan_cycle(cycle_number: int) -> dict:
     all_buy_signals.sort(key=_edge_per_day, reverse=True)
     stats["buy_signals"] = len(all_buy_signals)
 
+    # Allocation cap: max 20% of positions for weekly/monthly (>1 day to settlement)
+    # Prevents capital lockup in longer-dated positions
+    MAX_LONGER_DATED_PCT = 0.20
+    max_longer_dated = int(config.MAX_OPEN_POSITIONS * MAX_LONGER_DATED_PCT)
+    current_longer_dated = sum(
+        1 for p in live_positions
+        if p.market_exposure > 0 and any(
+            k in p.ticker.upper() for k in ["KXAAAGASW", "KXAAAGASM", "KXWTIW", "KXGOLDW", "KXGOLDMON", "KXSILVERW", "KXSILVERMON"]
+        )
+    )
+    logger.info("Allocation: %d/%d longer-dated positions used", current_longer_dated, max_longer_dated)
+
     for buy_signal, market_type in all_buy_signals:
+        # Check allocation cap for non-daily positions
+        days_to_settle = getattr(buy_signal.market, 'days_to_settlement', 0) if hasattr(buy_signal, 'market') else 0
+        if days_to_settle > 1 and current_longer_dated >= max_longer_dated:
+            logger.debug("Skipping %s: longer-dated cap reached (%d/%d)",
+                        buy_signal.market.ticker, current_longer_dated, max_longer_dated)
+            continue
+
         if market_type == "weather":
             ticker = buy_signal.market.ticker
             ask_price = buy_signal.market.yes_ask
@@ -643,6 +662,9 @@ def run_scan_cycle(cycle_number: int) -> dict:
             _daily_spend += cost_usd
             balance -= cost_usd
             stats["buys_executed"] += 1
+            # Track allocation cap
+            if days_to_settle > 1:
+                current_longer_dated += 1
             logger.info(
                 "BUY executed: %s × %d @ %d¢ | cost $%.2f",
                 ticker, num_contracts, ask_cents, cost_usd,
