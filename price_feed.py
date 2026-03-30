@@ -49,19 +49,60 @@ def _get_yahoo_live(ticker: str) -> Optional[float]:
         return None
 
 
+def _get_fred_price(series_id: str) -> Optional[float]:
+    """Fallback: fetch latest price from FRED API (Federal Reserve)."""
+    cache_key = f"fred_{series_id}"
+    if cache_key in _cache and time.time() - _cache[cache_key]["ts"] < 3600:  # 1hr cache for FRED
+        return _cache[cache_key]["price"]
+    try:
+        url = f"https://api.stlouisfed.org/fred/series/observations"
+        params = {
+            "series_id": series_id,
+            "api_key": "DEMO_KEY",  # FRED allows limited anonymous access
+            "file_type": "json",
+            "sort_order": "desc",
+            "limit": 5,
+        }
+        r = requests.get(url, params=params, timeout=10)
+        r.raise_for_status()
+        obs = r.json().get("observations", [])
+        for o in obs:
+            val = o.get("value", ".")
+            if val != ".":
+                price = float(val)
+                _cache[cache_key] = {"price": price, "ts": time.time()}
+                logger.debug("FRED %s: $%.2f", series_id, price)
+                return price
+    except Exception as e:
+        logger.debug("FRED fallback failed for %s: %s", series_id, e)
+    return None
+
+
 def get_gold_spot() -> Optional[float]:
-    """Get current gold spot price (XAU/USD). Returns None on failure."""
-    return _get_yahoo_live("GC=F")
+    """Get current gold spot price. Primary: Yahoo. Fallback: FRED."""
+    price = _get_yahoo_live("GC=F")
+    if price is None:
+        logger.warning("Yahoo gold failed, trying FRED fallback")
+        price = _get_fred_price("GOLDAMGBD228NLBM")  # London gold fixing
+    return price
 
 
 def get_silver_spot() -> Optional[float]:
-    """Get current silver spot price (XAG/USD). Returns None on failure."""
-    return _get_yahoo_live("SI=F")
+    """Get current silver spot price. Primary: Yahoo. Fallback: FRED."""
+    price = _get_yahoo_live("SI=F")
+    if price is None:
+        logger.warning("Yahoo silver failed, trying FRED fallback")
+        price = _get_fred_price("SLVPRUSD")  # Silver fixing
+    return price
 
 
 def get_oil_spot() -> Optional[float]:
-    """Get current WTI crude spot price. Returns None on failure."""
-    return _get_yahoo_live("CL=F")
+    """Get current WTI crude spot. Primary: Yahoo. Fallback: FRED."""
+    price = _get_yahoo_live("CL=F")
+    if price is None:
+        logger.warning("Yahoo oil failed, trying FRED fallback")
+        price = _get_fred_price("DCOILWTICO")  # WTI daily
+    return price
 
 
 def clear_cache():

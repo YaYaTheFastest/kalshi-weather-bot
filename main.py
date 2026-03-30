@@ -79,6 +79,7 @@ from kalshi_client import (
 )
 from noaa_scanner import fetch_all_forecasts, fetch_today_forecasts
 from risk_manager import RiskLimitExceeded, risk_manager
+from risk_controls import risk_controls
 
 # ---------------------------------------------------------------------------
 # Feature flags — enable/disable market types
@@ -255,6 +256,26 @@ def run_scan_cycle(cycle_number: int) -> dict:
 
     balance = get_balance()
     logger.info("Portfolio balance: $%.2f", balance)
+
+    # ---- Advanced risk controls ----
+    # Equity drawdown check: estimate total equity from balance + position exposure
+    total_exposure = sum(p.market_exposure_dollars for p in live_positions)
+    estimated_equity = balance + total_exposure
+    if risk_controls.check_equity_drawdown(estimated_equity):
+        logger.warning("EQUITY DRAWDOWN PAUSE: %s", risk_controls.pause_reason)
+        telegram_alerts._send(
+            f"\U0001f6a8 <b>TRADING PAUSED — EQUITY DRAWDOWN</b>\n"
+            f"{risk_controls.pause_reason}\n"
+            f"Trading halted until tomorrow. Manual unpause available."
+        )
+        return stats
+    if risk_controls.is_paused:
+        logger.warning("Trading paused: %s", risk_controls.pause_reason)
+        return stats
+
+    # Win rate position sizing: reduce if rolling WR below 65%
+    effective_max_position = risk_controls.get_adjusted_position_size()
+    logger.info("Risk controls: %s", risk_controls.status_summary())
 
     # Hard balance floor: never trade if balance < $5
     if balance < 5.0:
@@ -562,6 +583,10 @@ def run_scan_cycle(cycle_number: int) -> dict:
             risk_manager.record_sell(ticker, proceeds)
             held_tickers.discard(ticker)
             stats["sells_executed"] += 1
+            # Record for win rate tracking: profitable if proceeds > cost basis
+            cost_basis = sell_signal.position.market_exposure_dollars + sell_signal.position.fees_paid
+            won = proceeds > cost_basis
+            risk_controls.record_trade(ticker, won, proceeds - cost_basis)
             logger.info("SELL executed: %s × %d @ %d¢", ticker, num_contracts, bid_cents)
         else:
             logger.error("SELL failed for %s: %s", ticker, result.error)
@@ -615,8 +640,8 @@ def run_scan_cycle(cycle_number: int) -> dict:
             logger.info("Daily spend cap nearly reached ($%.2f spent). Stopping buys.", _daily_spend)
             break
 
-        # Size the position (capped by remaining daily budget)
-        effective_max = min(config.MAX_POSITION_USD, remaining_budget, balance)
+        # Size the position (capped by remaining daily budget and win-rate adjustment)
+        effective_max = min(effective_max_position, remaining_budget, balance)
         num_contracts = max(1, int(effective_max / ask_price)) if ask_price > 0 else 0
         cost_usd = num_contracts * ask_price
         if cost_usd > effective_max:
