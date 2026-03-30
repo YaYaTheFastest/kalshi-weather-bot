@@ -114,8 +114,8 @@ COMMODITY_MIN_EDGE: float = float(
     os.getenv("COMMODITY_MIN_EDGE", "0.35")
 )  # 35¢ minimum edge (simulation optimal: 74% win rate, +$44.50)
 COMMODITY_MIN_CONFIDENCE: float = float(
-    os.getenv("COMMODITY_MIN_CONFIDENCE", "0.50")
-)  # 50% min confidence (backtest: all 50%+ contracts won)
+    os.getenv("COMMODITY_MIN_CONFIDENCE", "0.70")
+)  # 70% min confidence (simulation: 80% WR at 70%+ conf vs 59% at 50%)
 COMMODITY_MIN_ASK: float = float(
     os.getenv("COMMODITY_MIN_ASK", "0.10")
 )  # 10¢ min ask — reject sub-10¢ longshots (favorite-longshot bias)
@@ -141,7 +141,7 @@ SPREAD_MAX_POSITION_USD: float = float(os.getenv("SPREAD_MAX_POSITION_USD", "2.0
 # Metals feature flags
 # ---------------------------------------------------------------------------
 ENABLE_GOLD: bool = os.getenv("ENABLE_GOLD", "true").lower() in ("true", "1", "yes")
-ENABLE_SILVER: bool = os.getenv("ENABLE_SILVER", "true").lower() in ("true", "1", "yes")
+ENABLE_SILVER: bool = os.getenv("ENABLE_SILVER", "false").lower() in ("true", "1", "yes")  # Disabled: 16% WR on daily, loses money
 
 # ---------------------------------------------------------------------------
 # EIA API (for gas price cross-referencing)

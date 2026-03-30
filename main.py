@@ -84,7 +84,7 @@ from risk_manager import RiskLimitExceeded, risk_manager
 # Feature flags — enable/disable market types
 # ---------------------------------------------------------------------------
 ENABLE_WEATHER: bool = os.getenv("ENABLE_WEATHER", "false").lower() in ("true", "1", "yes")
-ENABLE_GAS: bool = os.getenv("ENABLE_GAS", "true").lower() in ("true", "1", "yes")
+ENABLE_GAS: bool = os.getenv("ENABLE_GAS", "false").lower() in ("true", "1", "yes")  # Disabled: AAA returning 403
 ENABLE_OIL: bool = os.getenv("ENABLE_OIL", "true").lower() in ("true", "1", "yes")
 ENABLE_GOLD: bool = config.ENABLE_GOLD
 ENABLE_SILVER: bool = config.ENABLE_SILVER
