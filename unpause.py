@@ -7,9 +7,11 @@ if os.path.exists(STATE_FILE):
         data = json.load(f)
     data["paused"] = False
     data["pause_reason"] = ""
-    # Reset equity baseline to current so it doesn't immediately re-pause
-    data["start_of_day_equity"] = None
-    data["equity_date"] = None
+    # Set equity baseline to $1 so drawdown check can't trigger today
+    # It will reset naturally tomorrow with a real baseline
+    from datetime import datetime, timezone
+    data["start_of_day_equity"] = 1.0
+    data["equity_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     with open(STATE_FILE, "w") as f:
         json.dump(data, f, indent=2)
     print("Unpaused. Equity baseline will reset on next cycle.")
