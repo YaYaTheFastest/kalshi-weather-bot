@@ -261,17 +261,18 @@ def run_scan_cycle(cycle_number: int) -> dict:
     # Equity drawdown check: estimate total equity from balance + position exposure
     total_exposure = sum(p.market_exposure_dollars for p in live_positions)
     estimated_equity = balance + total_exposure
+    _buying_paused = False
     if risk_controls.check_equity_drawdown(estimated_equity):
-        logger.warning("EQUITY DRAWDOWN PAUSE: %s", risk_controls.pause_reason)
+        logger.warning("EQUITY DRAWDOWN — BUYS PAUSED (sells still active): %s", risk_controls.pause_reason)
         telegram_alerts._send(
-            f"\U0001f6a8 <b>TRADING PAUSED — EQUITY DRAWDOWN</b>\n"
+            f"\U0001f6a8 <b>NEW BUYS PAUSED — EQUITY DRAWDOWN</b>\n"
             f"{risk_controls.pause_reason}\n"
-            f"Trading halted until tomorrow. Manual unpause available."
+            f"Sells still active. New buys halted until tomorrow or manual unpause."
         )
-        return stats
-    if risk_controls.is_paused:
-        logger.warning("Trading paused: %s", risk_controls.pause_reason)
-        return stats
+        _buying_paused = True
+    elif risk_controls.is_paused:
+        logger.warning("Buys paused: %s", risk_controls.pause_reason)
+        _buying_paused = True
 
     # Win rate position sizing: reduce if rolling WR below 65%
     effective_max_position = risk_controls.get_adjusted_position_size()
@@ -596,6 +597,11 @@ def run_scan_cycle(cycle_number: int) -> dict:
     # ====================================================================
     # EXECUTE BUYS (ranked by edge-per-day across all market types)
     # ====================================================================
+    if _buying_paused:
+        logger.info("Buys skipped this cycle (drawdown pause). Sells were still processed.")
+        logger.info("Cycle %d complete: %s", cycle_number, risk_manager.status_summary())
+        return stats
+
     # Sort by annualized edge: edge / days_to_settlement
     # This prioritizes same-day settlements for faster capital turnover
     def _edge_per_day(item):
