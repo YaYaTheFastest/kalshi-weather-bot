@@ -262,17 +262,12 @@ def run_scan_cycle(cycle_number: int) -> dict:
     total_exposure = sum(p.market_exposure_dollars for p in live_positions)
     estimated_equity = balance + total_exposure
     _buying_paused = False
-    if risk_controls.check_equity_drawdown(estimated_equity):
-        logger.warning("EQUITY DRAWDOWN — BUYS PAUSED (sells still active): %s", risk_controls.pause_reason)
-        telegram_alerts._send(
-            f"\U0001f6a8 <b>NEW BUYS PAUSED — EQUITY DRAWDOWN</b>\n"
-            f"{risk_controls.pause_reason}\n"
-            f"Sells still active. New buys halted until tomorrow or manual unpause."
-        )
-        _buying_paused = True
-    elif risk_controls.is_paused:
-        logger.warning("Buys paused: %s", risk_controls.pause_reason)
-        _buying_paused = True
+    # Equity drawdown pause DISABLED per user instruction (Apr 2)
+    # Was too sensitive at 5% — kept re-triggering daily
+    # if risk_controls.check_equity_drawdown(estimated_equity):
+    #     ...
+    # if risk_controls.is_paused:
+    #     ...
 
     # Win rate position sizing: reduce if rolling WR below 65%
     effective_max_position = risk_controls.get_adjusted_position_size()
