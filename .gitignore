@@ -1,5 +1,25 @@
+# Secrets & environment — NEVER commit these
 .env
-*.pyc
+*.pem
+*.key
+*_private_key*
+secrets/
+
+# Python
 __pycache__/
-*.log
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
 venv/
+.venv/
+env/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
